@@ -4,3 +4,8 @@ python-dotenv
 openai
 pydantic
 pydantic-settings
+python-multipart
+sentence-transformers
+chromadb>=0.4.0
+numpy
+scikit-learn

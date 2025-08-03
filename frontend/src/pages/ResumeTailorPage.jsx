@@ -7,21 +7,26 @@ import useResumeTailor from "../hooks/useResumeTailor.js";
 import DescriptionIcon from "@mui/icons-material/Description";
 
 const ResumeTailorPage = () => {
-  const [resume, setResume] = useState("");
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [resumeContent, setResumeContent] = useState("");
   const [jobDesc, setJobDesc] = useState("");
   const { output, loading, error, tailorResume } = useResumeTailor();
 
-  const handleFileChange = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
+  const handleFileSelect = (file) => {
+    setSelectedFile(file);
     const reader = new FileReader();
-    reader.onload = (evt) => setResume(evt.target.result);
+    reader.onload = (evt) => {
+      setResumeContent(evt.target.result);
+    };
     reader.readAsText(file);
   };
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    tailorResume(resume, jobDesc);
+    if (!resumeContent || !jobDesc) {
+      return;
+    }
+    tailorResume(resumeContent, jobDesc);
   };
 
   return (
@@ -36,41 +41,11 @@ const ResumeTailorPage = () => {
             Resume Tailor AI
           </span>
         </div>
+        
         <form onSubmit={handleSubmit} className="px-8 py-8 flex flex-col gap-7">
           {/* Upload Resume Section */}
-          <div>
-            <label className="block text-base font-semibold text-gray-700 mb-2 tracking-wide">
-              Upload Resume
-            </label>
-            <div className="flex items-center gap-4">
-              {/* Custom file input styling */}
-              <label className="flex items-center px-4 py-2 bg-gradient-to-r from-blue-400 to-purple-400 text-white rounded-lg shadow cursor-pointer hover:from-blue-500 hover:to-purple-500 transition-all duration-150">
-                <svg
-                  className="w-5 h-5 mr-2"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5m0 0l5-5m-5 5V4"
-                  />
-                </svg>
-                <span className="font-medium">Choose File</span>
-                <input
-                  type="file"
-                  accept=".pdf,.doc,.docx,.txt"
-                  onChange={handleFileChange}
-                  className="hidden"
-                />
-              </label>
-              <span className="text-sm text-gray-500 font-medium truncate max-w-[120px]">
-                {resume ? "File loaded" : "No file chosen"}
-              </span>
-            </div>
-          </div>
+          <FileUpload onFileSelect={handleFileSelect} loading={loading} />
+          
           {/* Job Description Section */}
           <div>
             <label className="block text-base font-semibold text-gray-700 mb-2 tracking-wide">
@@ -81,12 +56,14 @@ const ResumeTailorPage = () => {
               placeholder="Paste the job description here..."
               value={jobDesc}
               onChange={(e) => setJobDesc(e.target.value)}
+              disabled={loading}
             />
           </div>
+          
           {/* Tailor Resume Button */}
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || !resumeContent || !jobDesc}
             className="w-full py-3 px-6 rounded-xl bg-gradient-to-r from-blue-500 to-purple-500 text-white font-bold text-lg shadow-md hover:from-blue-600 hover:to-purple-600 transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed mt-2"
           >
             {loading ? (
@@ -97,12 +74,14 @@ const ResumeTailorPage = () => {
               "Tailor Resume"
             )}
           </button>
+          
           {/* Error and Output */}
           {error && (
             <div className="mt-4 text-red-700 bg-red-100 rounded-xl px-4 py-2 text-center font-semibold shadow-md border border-red-200 animate-pulse">
               {error}
             </div>
           )}
+          
           {output && (
             <div className="mt-8">
               <TailoredOutput output={output} />
@@ -110,6 +89,7 @@ const ResumeTailorPage = () => {
           )}
         </form>
       </div>
+      
       <footer className="mt-10 text-gray-400 text-sm drop-shadow-lg">
         &copy; {new Date().getFullYear()}{" "}
         <span className="font-semibold text-blue-500">Resume Tailor AI</span>.
