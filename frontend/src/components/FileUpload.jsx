@@ -136,7 +136,7 @@ const FileUpload = ({ onFileSelect, loading }) => {
                     d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
                   />
                 </svg>
-                <p className="font-medium text-gray-800">{fileName}</p>
+                <p className="font-medium text-gray-800 truncate max-w-[16rem]" title={fileName}>{fileName}</p>
               </div>
               <p className="text-sm text-gray-600 mt-1">
                 Resume file ready for processing

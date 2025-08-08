@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 import FileUpload from "../components/FileUpload.jsx";
-import JobDescriptionInput from "../components/JobDescriptionInput.jsx";
 import TailoredOutput from "../components/TailoredOutput.jsx";
 import LoadingSpinner from "../components/LoadingSpinner.jsx";
 import useResumeTailor from "../hooks/useResumeTailor.js";
@@ -32,66 +31,46 @@ const ResumeTailorPage = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-100 via-white to-purple-200 flex flex-col items-center justify-center py-8 px-2">
-      <div className="w-full max-w-lg bg-white/80 rounded-3xl shadow-2xl border border-blue-200 backdrop-blur-lg p-0 overflow-hidden">
-        {/* Card Header with Icon */}
-        <div className="bg-gradient-to-r from-blue-100 to-purple-100 px-8 py-6 border-b border-blue-100 flex items-center gap-3">
+      <div className="resume-card w-full max-w-5xl">
+        <div className="resume-card__header flex items-center gap-3">
           <span className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-gradient-to-br from-blue-400 to-purple-400 text-white shadow-lg">
             <DescriptionIcon fontSize="large" />
           </span>
-          <span className="text-2xl font-extrabold text-gray-800 tracking-tight ml-2">
-            Resume Tailor AI
-          </span>
+          <div>
+            <h1 className="resume-title">Resume Tailor AI</h1>
+            <p className="text-white/80 text-sm leading-tight">Smart tailoring for LaTeX resumes</p>
+          </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="px-8 py-8 flex flex-col gap-7">
-          {/* Upload Resume Section */}
-          <FileUpload onFileSelect={handleFileSelect} loading={loading} />
+        <form onSubmit={handleSubmit} className="card-body">
+          <section className="editor-pane">
+            <FileUpload onFileSelect={handleFileSelect} loading={loading} />
+            <div className="mt-6">
+              <label className="block text-base font-semibold text-gray-700 mb-2 tracking-wide">
+                Job Description
+              </label>
+              <textarea
+                className="editor-textarea"
+                placeholder="Paste the job description here..."
+                value={jobDesc}
+                onChange={(e) => setJobDesc(e.target.value)}
+                disabled={loading}
+              />
+            </div>
+          </section>
 
-          {/* Job Description Section */}
-          <div>
-            <label className="block text-base font-semibold text-gray-700 mb-2 tracking-wide">
-              Job Description
-            </label>
-            <textarea
-              className="w-full min-h-[100px] rounded-lg border border-blue-200 bg-white/80 px-4 py-3 text-gray-700 font-medium shadow focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-blue-400 transition-all resize-none placeholder-gray-400"
-              placeholder="Paste the job description here..."
-              value={jobDesc}
-              onChange={(e) => setJobDesc(e.target.value)}
-              disabled={loading}
-            />
-          </div>
-
-          {/* Tailor Resume Button */}
-          <button
-            type="submit"
-            disabled={loading || !resumeContent || !jobDesc}
-            className="w-full py-3 px-6 rounded-xl bg-gradient-to-r from-blue-500 to-purple-500 text-white font-bold text-lg shadow-md hover:from-blue-600 hover:to-purple-600 transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed mt-2"
-          >
-            {loading ? (
-              <span className="flex items-center justify-center gap-2">
-                <LoadingSpinner size={5} /> Tailoring...
-              </span>
-            ) : (
-              "Tailor Resume"
-            )}
-          </button>
-
-          {/* Error and Output */}
           {error && (
-            <div className="mt-4 text-red-700 bg-red-100 rounded-xl px-4 py-2 text-center font-semibold shadow-md border border-red-200 animate-pulse">
+            <div className="col-span-2 mt-2 text-red-700 bg-red-100 rounded-xl px-4 py-2 text-center font-semibold shadow-md border border-red-200">
               {error}
             </div>
           )}
 
           {output && (
-            <div className="mt-8">
+            <div className="col-span-2 mt-4">
               <TailoredOutput output={output} />
-
               {output && (
                 <div className="mt-6 p-4 bg-yellow-50 border-l-4 border-yellow-400 rounded">
-                  <h3 className="font-semibold text-yellow-800 mb-2">
-                    Improvements Summary
-                  </h3>
+                  <h3 className="font-semibold text-yellow-800 mb-2">Improvements Summary</h3>
                   {improvementsSummary ? (
                     <p className="whitespace-pre-wrap text-yellow-900">{improvementsSummary}</p>
                   ) : (
@@ -101,13 +80,28 @@ const ResumeTailorPage = () => {
               )}
             </div>
           )}
+
+          <div className="resume-card__footer col-span-2">
+            <button
+              type="submit"
+              disabled={loading || !resumeContent || !jobDesc}
+              className="cta-button"
+            >
+              {loading ? (
+                <span className="flex items-center justify-center gap-2">
+                  <LoadingSpinner /> Tailoring...
+                </span>
+              ) : (
+                "Tailor Resume"
+              )}
+            </button>
+          </div>
         </form>
       </div>
 
       <footer className="mt-10 text-gray-400 text-sm drop-shadow-lg">
-        &copy; {new Date().getFullYear()}{" "}
-        <span className="font-semibold text-blue-500">Resume Tailor AI</span>.
-        All rights reserved.
+        &copy; {new Date().getFullYear()} {""}
+        <span className="font-semibold text-blue-500">Resume Tailor AI</span>. All rights reserved.
       </footer>
     </div>
   );

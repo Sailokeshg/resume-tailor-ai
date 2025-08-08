@@ -1,9 +1,95 @@
 @import "tailwindcss/base";
 @import "tailwindcss/components";
 @import "tailwindcss/utilities";
+@import "prismjs/themes/prism.css";
 
 
 #root {
   min-height: 100vh;
   background: #f7f7f7;
 }
+
+/* Resume Card */
+.resume-card {
+  max-width: 64rem;
+  border-radius: 1.5rem;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+  background: #ffffff;
+  overflow: hidden;
+}
+.resume-card__header {
+  background: linear-gradient(120deg, #5aa2ff, #c67bff);
+  padding: 1.25rem 1.5rem;
+}
+.resume-title {
+  font-size: 1.9rem;
+  font-weight: 600;
+  color: #ffffff;
+}
+.card-body {
+  display: grid;
+  grid-template-columns: 1fr; /* single column since preview removed */
+  gap: 1.5rem;
+  padding: 1.25rem;
+}
+.resume-card__footer {
+  padding: 1rem 0 0 0;
+}
+
+.editor-pane {
+  display: flex;
+  flex-direction: column;
+}
+
+.editor-textarea {
+  width: 100%;
+  min-height: 120px;
+  border-radius: 1rem;
+  border: 1px solid #e5e7eb;
+  padding: 0.75rem 1rem;
+  background: #ffffff;
+  color: #374151;
+  font-weight: 500;
+}
+.editor-textarea:focus {
+  outline: 2px dashed #4F8EF7;
+  outline-offset: 3px;
+}
+
+/* removed preview pane styles as preview feature was dropped */
+
+.cta-button {
+  width: 100%;
+  padding: 0.75rem 1.25rem;
+  border-radius: 1rem;
+  background: linear-gradient(135deg, #C776FF, #4F8EF7);
+  color: #fff;
+  font-weight: 600;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+.cta-button:hover {
+  transform: scale(1.02);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.1);
+}
+.cta-button:disabled { opacity: 0.6; cursor: not-allowed; }
+.cta-button:focus { outline: 2px dashed #4F8EF7; outline-offset: 3px; }
+
+/* Generic focus states for inputs/buttons */
+button:focus, input:focus, textarea:focus, [role="button"]:focus {
+  outline: 2px dashed #4F8EF7;
+  outline-offset: 3px;
+}
+
+/* Simple spinner */
+.spinner {
+  width: 24px;
+  height: 24px;
+  border-radius: 9999px;
+  border: 3px solid rgba(0,0,0,0.1);
+  border-top-color: #4F8EF7;
+  animation: spin 1s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* No special responsive rules required now */
