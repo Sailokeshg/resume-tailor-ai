@@ -12,7 +12,10 @@
     "react": "^18.0.0",
     "react-dom": "^18.0.0",
     "react-simple-code-editor": "^0.14.1",
-    "react-syntax-highlighter": "^15.6.1"
+    "react-syntax-highlighter": "^15.6.1",
+    "react-pdf": "^9.1.0",
+    "pdfjs-dist": "^4.10.38",
+    "jszip": "^3.10.1"
   },
   "scripts": {
     "dev": "vite",

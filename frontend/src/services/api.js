@@ -42,6 +42,30 @@ class ApiService {
     return response.json();
   }
 
+  async compilePdf(latexContent) {
+    const response = await fetch(`${this.baseURL}/api/v1/tailor/compile`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/pdf'
+      },
+      body: JSON.stringify({ resume: latexContent }),
+    });
+
+    if (!response.ok) {
+      // Try to parse error body for message
+      let message = 'Failed to compile PDF';
+      try {
+        const err = await response.json();
+        if (err?.detail) message = err.detail;
+      } catch (_) {}
+      throw new Error(message);
+    }
+
+    const blob = await response.blob();
+    return blob;
+  }
+
   async analyzeMatch(resumeContent, jobDescription) {
     const response = await fetch(`${this.baseURL}/api/v1/resume/analyze`, {
       method: 'POST',

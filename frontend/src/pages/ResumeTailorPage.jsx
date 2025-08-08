@@ -68,16 +68,14 @@ const ResumeTailorPage = () => {
           {output && (
             <div className="col-span-2 mt-4">
               <TailoredOutput output={output} />
-              {output && (
-                <div className="mt-6 p-4 bg-yellow-50 border-l-4 border-yellow-400 rounded">
-                  <h3 className="font-semibold text-yellow-800 mb-2">Improvements Summary</h3>
-                  {improvementsSummary ? (
-                    <p className="whitespace-pre-wrap text-yellow-900">{improvementsSummary}</p>
-                  ) : (
-                    <p className="text-yellow-900 italic">No improvements summary provided by the model.</p>
-                  )}
-                </div>
-              )}
+              <div className="mt-6 p-4 bg-yellow-50 border-l-4 border-yellow-400 rounded">
+                <h3 className="font-semibold text-yellow-800 mb-2">Improvements Summary</h3>
+                {improvementsSummary ? (
+                  <p className="whitespace-pre-wrap text-yellow-900">{improvementsSummary}</p>
+                ) : (
+                  <p className="text-yellow-900 italic">No improvements summary provided by the model.</p>
+                )}
+              </div>
             </div>
           )}
 
