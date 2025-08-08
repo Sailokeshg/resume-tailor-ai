@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import Editor from "react-simple-code-editor";
 import Prism from "prismjs";
 import "prismjs/components/prism-latex";
@@ -56,66 +56,59 @@ const TailoredOutput = ({ output }) => {
   };
 
   return (
-    <div className="mt-8">
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div>
-          <div className="flex justify-between items-center mb-2">
-            <h2 className="text-2xl font-semibold">Tailored LaTeX</h2>
-          </div>
-          <div className="w-full border border-gray-200 rounded-xl bg-white text-black shadow-sm">
-            <div ref={codeRef}>
-              <Editor
-                value={text}
-                onValueChange={setText}
-                highlight={highlight}
-                padding={16}
-                textareaId="tailored-resume-editor"
-                className="outline-none language-latex"
-                style={{
-                  fontFamily: "Fira Mono, Menlo, Monaco, 'Courier New', monospace",
-                  fontSize: 14.5,
-                  minHeight: "28rem",
-                  overflow: "auto",
-                }}
-              />
-            </div>
+    <>
+      {/* Editor Panel */}
+      <section className="panel">
+        <div className="panel-header"><h2>Tailored LaTeX</h2></div>
+        <div className="panel-body panel-body-fill">
+          <div className="code-surface" ref={codeRef}>
+            <Editor
+              value={text}
+              onValueChange={setText}
+              highlight={highlight}
+              padding={16}
+              textareaId="tailored-resume-editor"
+              className="outline-none language-latex code-editor"
+              style={{
+                fontFamily: "Fira Mono, Menlo, Monaco, 'Courier New', monospace",
+                fontSize: 14.5,
+              }}
+            />
           </div>
         </div>
+      </section>
 
-        <div>
-          <div className="flex justify-between items-center mb-2">
-            <h2 className="text-2xl font-semibold">Live PDF Preview</h2>
-            {pdfBlobUrl && (
-              <a
-                href={pdfBlobUrl}
-                download="tailored-resume.pdf"
-                className="text-sm px-3 py-1 rounded bg-blue-600 text-white hover:bg-blue-700"
-              >
-                Download
-              </a>
-            )}
-          </div>
-          <div className="w-full border border-gray-200 rounded-xl bg-white shadow-sm p-2 min-h-[28rem] flex items-center justify-center">
-            {compileError ? (
-              <div className="text-red-600 text-sm whitespace-pre-wrap">{compileError}</div>
-            ) : pdfBlobUrl ? (
-              <Document
-                file={pdfBlobUrl}
-                onLoadSuccess={({ numPages }) => setNumPages(numPages)}
-                onLoadError={(err) => setCompileError(err?.message || "Failed to load PDF file")}
-              >
-                <Page pageNumber={1} width={600} renderTextLayer={false} renderAnnotationLayer={false} />
-              </Document>
-            ) : (
-              <p className="text-gray-500">PDF preview will appear here.</p>
-            )}
-          </div>
-          {numPages && numPages > 1 && (
-            <p className="text-xs text-gray-500 mt-1">Showing page 1 of {numPages}</p>
+      {/* Preview Panel */}
+      <section className="panel">
+        <div className="panel-header panel-header-actions">
+          <h2>Live PDF Preview</h2>
+          {pdfBlobUrl && (
+            <a href={pdfBlobUrl} download="tailored-resume.pdf" className="btn btn-secondary">
+              Download
+            </a>
           )}
         </div>
-      </div>
-    </div>
+        <div className="panel-body panel-body-fill preview-surface">
+          {compileError ? (
+            <div className="notice error">{compileError}</div>
+          ) : pdfBlobUrl ? (
+            <Document
+              file={pdfBlobUrl}
+              onLoadSuccess={({ numPages }) => setNumPages(numPages)}
+              onLoadError={(err) => setCompileError(err?.message || "Failed to load PDF file")}
+            >
+              <Page pageNumber={1} width={720} renderTextLayer={false} renderAnnotationLayer={false} />
+            </Document>
+          ) : (
+            <div className="notice">PDF preview will appear here.</div>
+          )}
+
+          {numPages && numPages > 1 && (
+            <div className="preview-meta">Showing page 1 of {numPages}</div>
+          )}
+        </div>
+      </section>
+    </>
   );
 };
 
