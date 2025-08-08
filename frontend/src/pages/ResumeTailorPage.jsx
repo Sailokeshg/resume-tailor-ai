@@ -10,7 +10,7 @@ const ResumeTailorPage = () => {
   const [selectedFile, setSelectedFile] = useState(null);
   const [resumeContent, setResumeContent] = useState("");
   const [jobDesc, setJobDesc] = useState("");
-  const { output, suggestions, loading, error, tailorResume } =
+  const { output, suggestions, improvementsSummary, loading, error, tailorResume } =
     useResumeTailor();
 
   const handleFileSelect = (file) => {
@@ -87,18 +87,16 @@ const ResumeTailorPage = () => {
             <div className="mt-8">
               <TailoredOutput output={output} />
 
-              {suggestions && suggestions.length > 0 && (
+              {output && (
                 <div className="mt-6 p-4 bg-yellow-50 border-l-4 border-yellow-400 rounded">
                   <h3 className="font-semibold text-yellow-800 mb-2">
-                    Suggestions
+                    Improvements Summary
                   </h3>
-                  <ul className="list-disc pl-5 text-yellow-900">
-                    {suggestions.map((suggestion, index) => (
-                      <li key={index} className="mb-1">
-                        {suggestion}
-                      </li>
-                    ))}
-                  </ul>
+                  {improvementsSummary ? (
+                    <p className="whitespace-pre-wrap text-yellow-900">{improvementsSummary}</p>
+                  ) : (
+                    <p className="text-yellow-900 italic">No improvements summary provided by the model.</p>
+                  )}
                 </div>
               )}
             </div>
