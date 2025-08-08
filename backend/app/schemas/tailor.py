@@ -8,3 +8,4 @@ class TailorRequest(BaseModel):
 
 class TailorResponse(BaseModel):
     tailored_resume: str
+    suggestions: list[str] = []

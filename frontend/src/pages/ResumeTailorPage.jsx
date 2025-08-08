@@ -10,7 +10,8 @@ const ResumeTailorPage = () => {
   const [selectedFile, setSelectedFile] = useState(null);
   const [resumeContent, setResumeContent] = useState("");
   const [jobDesc, setJobDesc] = useState("");
-  const { output, loading, error, tailorResume } = useResumeTailor();
+  const { output, suggestions, loading, error, tailorResume } =
+    useResumeTailor();
 
   const handleFileSelect = (file) => {
     setSelectedFile(file);
@@ -41,11 +42,11 @@ const ResumeTailorPage = () => {
             Resume Tailor AI
           </span>
         </div>
-        
+
         <form onSubmit={handleSubmit} className="px-8 py-8 flex flex-col gap-7">
           {/* Upload Resume Section */}
           <FileUpload onFileSelect={handleFileSelect} loading={loading} />
-          
+
           {/* Job Description Section */}
           <div>
             <label className="block text-base font-semibold text-gray-700 mb-2 tracking-wide">
@@ -59,7 +60,7 @@ const ResumeTailorPage = () => {
               disabled={loading}
             />
           </div>
-          
+
           {/* Tailor Resume Button */}
           <button
             type="submit"
@@ -74,22 +75,37 @@ const ResumeTailorPage = () => {
               "Tailor Resume"
             )}
           </button>
-          
+
           {/* Error and Output */}
           {error && (
             <div className="mt-4 text-red-700 bg-red-100 rounded-xl px-4 py-2 text-center font-semibold shadow-md border border-red-200 animate-pulse">
               {error}
             </div>
           )}
-          
+
           {output && (
             <div className="mt-8">
               <TailoredOutput output={output} />
+
+              {suggestions && suggestions.length > 0 && (
+                <div className="mt-6 p-4 bg-yellow-50 border-l-4 border-yellow-400 rounded">
+                  <h3 className="font-semibold text-yellow-800 mb-2">
+                    Suggestions
+                  </h3>
+                  <ul className="list-disc pl-5 text-yellow-900">
+                    {suggestions.map((suggestion, index) => (
+                      <li key={index} className="mb-1">
+                        {suggestion}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
           )}
         </form>
       </div>
-      
+
       <footer className="mt-10 text-gray-400 text-sm drop-shadow-lg">
         &copy; {new Date().getFullYear()}{" "}
         <span className="font-semibold text-blue-500">Resume Tailor AI</span>.

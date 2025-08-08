@@ -4,10 +4,19 @@ from app.services.ai_service import tailor_resume
 
 router = APIRouter()
 
+
 @router.post("/", response_model=TailorResponse)
 def tailor_resume_endpoint(request: TailorRequest):
     try:
         tailored = tailor_resume(request.resume, request.job_description)
-        return TailorResponse(tailored_resume=tailored)
-    except Exception as e:
+
+        # Generate suggestions (reuse analyze logic)
+        from app.services.ai_service import analyze_resume_job_match
+        analysis = analyze_resume_job_match(
+            request.resume, request.job_description)
+        suggestions = analysis.get(
+            "suggested_improvements", []) if isinstance(analysis, dict) else []
+
+        return TailorResponse(tailored_resume=tailored, suggestions=suggestions)
+    except Exception:
         raise HTTPException(status_code=500, detail="Failed to tailor resume.")

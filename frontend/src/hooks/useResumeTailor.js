@@ -3,6 +3,7 @@ import api from "../services/api";
 
 export default function useResumeTailor() {
   const [output, setOutput] = useState("");
+  const [suggestions, setSuggestions] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -10,10 +11,12 @@ export default function useResumeTailor() {
     setLoading(true);
     setError("");
     setOutput("");
-    console.log("inside tailorResume with resume:", resume, "and jobDesc:", jobDesc);
+    setSuggestions([]);
+
     try {
       const res = await api.tailorResume(resume, jobDesc);
       setOutput(res.tailored_resume);
+      setSuggestions(res.suggestions || []);
     } catch (err) {
       setError("Failed to tailor resume.");
     } finally {
@@ -21,5 +24,5 @@ export default function useResumeTailor() {
     }
   };
 
-  return { output, loading, error, tailorResume };
+  return { output, suggestions, loading, error, tailorResume };
 }
