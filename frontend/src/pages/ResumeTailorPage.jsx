@@ -9,6 +9,7 @@ const ResumeTailorPage = () => {
   const [selectedFile, setSelectedFile] = useState(null);
   const [resumeContent, setResumeContent] = useState("");
   const [jobDesc, setJobDesc] = useState("");
+  const [model, setModel] = useState("DEEPSEEK_R1_0528");
   const { output, suggestions, improvementsSummary, loading, error, tailorResume } =
     useResumeTailor();
   const [showInputs, setShowInputs] = useState(true);
@@ -27,7 +28,7 @@ const ResumeTailorPage = () => {
     if (!resumeContent || !jobDesc) {
       return;
     }
-    tailorResume(resumeContent, jobDesc);
+    tailorResume(resumeContent, jobDesc, model);
   };
 
   return (
@@ -43,12 +44,20 @@ const ResumeTailorPage = () => {
           </div>
         </div>
         <div className="header-actions">
+          <select
+            className="model-select"
+            value={model}
+            onChange={(e) => setModel(e.target.value)}
+          >
+            <option value="DEEPSEEK_R1_0528">DeepSeek: R1 0528</option>
+            <option value="Z.AI_GLM_4_5_AIR">Z.AI: GLM 4.5 Air</option>
+          </select>
           <button
             type="button"
             className="btn btn-secondary"
             onClick={() => setShowInputs((v) => !v)}
           >
-            {showInputs ? "Hide Inputs" : "Show Inputs"}
+            {showInputs ? "Hide Panel" : "Show Panel"}
           </button>
           <button
             onClick={handleSubmit}
@@ -100,7 +109,7 @@ const ResumeTailorPage = () => {
         )}
 
         {/* Editor + Preview Panels */}
-        <TailoredOutput output={output} />
+        <TailoredOutput output={output} resumeContent={resumeContent} loading={loading} />
       </main>
 
       <footer className="app-footer">

@@ -9,7 +9,7 @@ import api from "../services/api";
 // This avoids version mismatches between the core library and the worker
 pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
-const TailoredOutput = ({ output }) => {
+const TailoredOutput = ({ output, resumeContent, loading }) => {
   const codeRef = useRef(null);
   const [text, setText] = useState(output || "");
   const [pdfBlobUrl, setPdfBlobUrl] = useState("");
@@ -19,8 +19,21 @@ const TailoredOutput = ({ output }) => {
   const [pageWidth, setPageWidth] = useState(0);
 
   useEffect(() => {
-    setText(output || "");
-  }, [output]);
+    // Decide what to show inside the code panel based on app state
+    if (loading) {
+      setText("");
+      return;
+    }
+    if (output) {
+      setText(output || "");
+      return;
+    }
+    if (resumeContent) {
+      setText(resumeContent || "");
+      return;
+    }
+    setText("");
+  }, [output, resumeContent, loading]);
 
   // Debounced PDF compilation whenever text changes
   useEffect(() => {
@@ -78,26 +91,40 @@ const TailoredOutput = ({ output }) => {
     };
   }, []);
 
+  // Derived UI state
+  const mode = loading ? "loading" : output ? "output" : resumeContent ? "uploaded" : "empty";
+  const panelTitle = mode === "uploaded" ? "Your resume" : "Tailored LaTeX";
+
   return (
     <>
       {/* Editor Panel */}
       <section className="panel">
-        <div className="panel-header"><h2>Tailored LaTeX</h2></div>
+        <div className="panel-header"><h2>{panelTitle}</h2></div>
         <div className="panel-body panel-body-fill">
-          <div className="code-surface" ref={codeRef}>
-            <Editor
-              value={text}
-              onValueChange={setText}
-              highlight={highlight}
-              padding={16}
-              textareaId="tailored-resume-editor"
-              className="outline-none language-latex code-editor"
-              style={{
-                fontFamily: "Fira Mono, Menlo, Monaco, 'Courier New', monospace",
-                fontSize: 14.5,
-              }}
-            />
-          </div>
+          {text ? (
+            <div className="code-surface" ref={codeRef}>
+              <Editor
+                value={text}
+                onValueChange={setText}
+                highlight={highlight}
+                padding={16}
+                textareaId="tailored-resume-editor"
+                className="outline-none language-latex code-editor"
+                style={{
+                  fontFamily: "Fira Mono, Menlo, Monaco, 'Courier New', monospace",
+                  fontSize: 14.5,
+                }}
+              />
+            </div>
+          ) : (
+            <div className="placeholder-surface">
+              {mode === "loading" ? (
+                <div className="notice">Tailored LaTeX will appear here…</div>
+              ) : (
+                <div className="notice">Your LaTeX will appear here.</div>
+              )}
+            </div>
+          )}
         </div>
       </section>
 

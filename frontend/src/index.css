@@ -45,6 +45,8 @@ body {
 .title { font-weight: 700; letter-spacing: 0.2px; }
 .subtitle { color: var(--muted); font-size: 12px; margin-top: -2px; }
 .header-actions { display: flex; gap: 10px; }
+/* Model select */
+.model-select { background: #0c142b; color: var(--text); border: 1px solid var(--panel-border); border-radius: 10px; padding: 6px 10px; font-weight: 700; letter-spacing: 0.2px; }
 
 .app-main { display: grid; grid-template-columns: 360px 1fr 1fr; gap: 14px; padding: 14px; min-height: 0; }
 .app-main.no-inputs { grid-template-columns: 1fr 1fr; }
@@ -86,6 +88,9 @@ body {
 .notice { color: var(--muted); font-size: 13px; }
 .notice.error { color: #fecaca; }
 .preview-meta { margin-top: 8px; color: var(--muted); font-size: 12px; text-align: center; }
+
+/* Generic placeholder surface */
+.placeholder-surface { display: grid; place-items: center; background: #0c142b; border: 1px dashed var(--panel-border); border-radius: 12px; min-height: 420px; }
 
 /* Dropzone */
 .dropzone { position: relative; border: 1.5px dashed var(--panel-border); border-radius: 12px; padding: 20px; text-align: center; cursor: pointer; background: #0c142b; transition: border-color 0.2s, background 0.2s; }

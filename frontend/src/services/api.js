@@ -22,7 +22,7 @@ class ApiService {
     return response.json();
   }
 
-  async tailorResume(resumeContent, jobDescription) {
+  async tailorResume(resumeContent, jobDescription, model) {
     const response = await fetch(`${this.baseURL}/api/v1/tailor/`, {
       method: 'POST',
       headers: {
@@ -31,6 +31,7 @@ class ApiService {
       body: JSON.stringify({
         resume: resumeContent,
         job_description: jobDescription,
+        model,
       }),
     });
 

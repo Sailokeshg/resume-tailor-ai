@@ -1,6 +1,7 @@
 from openai import OpenAI 
 from app.core.config import settings
 from app.services.rag_service import rag_service
+from typing import Dict
 from app.services.latex_parser import parse_latex_resume
 import uuid
 import logging
@@ -12,7 +13,19 @@ client = OpenAI(
     api_key=settings.openai_api_key,
 )
 
-def tailor_resume(resume: str, job_description: str) -> str:
+def resolve_provider_model(selected: str, mapping: Dict[str, str]) -> str:
+    """Resolve a frontend-provided model to a provider id.
+    - If `selected` is already a full provider id (contains a slash), return it
+    - Else, look up the friendly key in `mapping`, default to DEEPSEEK_R1_0528
+    """
+    if not selected:
+        return mapping["DEEPSEEK_R1_0528"]
+    if "/" in selected:
+        return selected
+    return mapping.get(selected, mapping["DEEPSEEK_R1_0528"])
+
+
+def tailor_resume(resume: str, job_description: str, model: str | None = "DEEPSEEK_R1_0528") -> str:
     """
     Tailor resume using RAG and AI
     """
@@ -41,11 +54,19 @@ def tailor_resume(resume: str, job_description: str) -> str:
         prompt = create_tailoring_prompt(resume, job_description, relevant_sections, job_keywords)
         
         # Generate tailored resume
+        # Friendly keys → provider model ids (extend easily here)
+        model_mapping = {
+            "DEEPSEEK_R1_0528": "deepseek/deepseek-r1-0528:free",
+            "Z.AI_GLM_4_5_AIR": "z-ai/glm-4.5-air:free",
+        }
+
+        provider_model = resolve_provider_model(model or "", model_mapping)
+
         completion = client.chat.completions.create(
             extra_headers={
                 "X-Title": "Resume Tailor AI",
             },
-            model="deepseek/deepseek-r1-0528:free",
+            model=provider_model,
             messages=[
                 {"role": "system", "content": "You are a professional resume writer specializing in LaTeX formatting. Always preserve LaTeX syntax and formatting."},
                 {"role": "user", "content": prompt}

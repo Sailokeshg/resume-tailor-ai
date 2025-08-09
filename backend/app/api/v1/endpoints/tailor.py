@@ -9,7 +9,7 @@ router = APIRouter()
 @router.post("/", response_model=TailorResponse)
 def tailor_resume_endpoint(request: TailorRequest):
     try:
-        tailored = tailor_resume(request.resume, request.job_description)
+        tailored = tailor_resume(request.resume, request.job_description, request.model)
 
         # Generate suggestions (reuse analyze logic)
         from app.services.ai_service import analyze_resume_job_match

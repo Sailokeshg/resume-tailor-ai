@@ -8,7 +8,7 @@ export default function useResumeTailor() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const tailorResume = async (resume, jobDesc) => {
+  const tailorResume = async (resume, jobDesc, model) => {
     setLoading(true);
     setError("");
     setOutput("");
@@ -16,7 +16,7 @@ export default function useResumeTailor() {
     setImprovementsSummary("");
 
     try {
-      const res = await api.tailorResume(resume, jobDesc);
+      const res = await api.tailorResume(resume, jobDesc, model);
       const raw = res.tailored_resume || "";
 
       const stripCodeFences = (text) => {
