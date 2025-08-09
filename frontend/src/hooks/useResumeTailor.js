@@ -19,6 +19,15 @@ export default function useResumeTailor() {
       const res = await api.tailorResume(resume, jobDesc, model);
       const raw = res.tailored_resume || "";
 
+      const removeThinkBlocks = (text) => {
+        try {
+          // Remove any chain-of-thought blocks like <think> ... </think>
+          return text.replace(/<think>[\s\S]*?<\/think>/gi, "");
+        } catch (_) {
+          return text;
+        }
+      };
+
       const stripCodeFences = (text) => {
         const fenceOpen = text.match(/^```[a-zA-Z]*\n/);
         if (fenceOpen) {
@@ -30,7 +39,7 @@ export default function useResumeTailor() {
         return text;
       };
 
-      const cleaned = stripCodeFences(raw).trim();
+      const cleaned = stripCodeFences(removeThinkBlocks(raw)).trim();
       const endTag = "\\end{document}";
       const endDocIndex = cleaned.indexOf(endTag);
 

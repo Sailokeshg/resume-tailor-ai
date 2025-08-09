@@ -5,6 +5,7 @@ from typing import Dict
 from app.services.latex_parser import parse_latex_resume
 import uuid
 import logging
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -12,6 +13,21 @@ client = OpenAI(
     base_url="https://openrouter.ai/api/v1",
     api_key=settings.openai_api_key,
 )
+
+def sanitize_model_output(text: str) -> str:
+    """Remove chain-of-thought and code fences if present, return clean LaTeX."""
+    try:
+        # Remove <think>...</think>
+        text = re.sub(r"<think>[\s\S]*?</think>", "", text, flags=re.IGNORECASE)
+        # Remove surrounding triple backtick fences (optionally with language)
+        fence_open = re.match(r"^```[a-zA-Z]*\n", text)
+        if fence_open:
+            closing_index = text.rfind("```")
+            if closing_index > len(fence_open.group(0)):
+                text = text[len(fence_open.group(0)):closing_index]
+        return text.strip()
+    except Exception:
+        return text
 
 def resolve_provider_model(selected: str, mapping: Dict[str, str]) -> str:
     """Resolve a frontend-provided model to a provider id.
@@ -57,7 +73,11 @@ def tailor_resume(resume: str, job_description: str, model: str | None = "DEEPSE
         # Friendly keys → provider model ids (extend easily here)
         model_mapping = {
             "DEEPSEEK_R1_0528": "deepseek/deepseek-r1-0528:free",
+            "DEEPSEEK_V3_0324": "deepseek/deepseek-chat-v3-0324:free",
+            "QWEN3_235B_A22B": "qwen/qwen3-235b-a22b:free",
             "Z.AI_GLM_4_5_AIR": "z-ai/glm-4.5-air:free",
+            "MICROSOFT_MAI_DS_R1": "microsoft/mai-ds-r1:free",
+            "MOONSHOTAI_KIMI_VL_A3B_THINKING": "moonshotai/kimi-vl-a3b-thinking:free",
         }
 
         provider_model = resolve_provider_model(model or "", model_mapping)
@@ -68,12 +88,13 @@ def tailor_resume(resume: str, job_description: str, model: str | None = "DEEPSE
             },
             model=provider_model,
             messages=[
-                {"role": "system", "content": "You are a professional resume writer specializing in LaTeX formatting. Always preserve LaTeX syntax and formatting."},
+                {"role": "system", "content": "You are a professional resume writer specializing in LaTeX formatting. Always preserve LaTeX syntax and formatting. Output only the final LaTeX content of the resume without any analysis, commentary, chain-of-thought, or <think>...</think> blocks. Do not use code fences. If you need to include any notes, put them after \\end{document}."},
                 {"role": "user", "content": prompt}
             ]
         )
         
-        tailored_resume = completion.choices[0].message.content.strip()
+        # Sanitize model output to remove any chain-of-thought blocks
+        tailored_resume = sanitize_model_output(completion.choices[0].message.content.strip())
         return tailored_resume
         
     except Exception as e:

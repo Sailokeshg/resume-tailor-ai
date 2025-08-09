@@ -17,6 +17,7 @@ const TailoredOutput = ({ output, resumeContent, loading }) => {
   const [numPages, setNumPages] = useState(null);
   const previewRef = useRef(null);
   const [pageWidth, setPageWidth] = useState(0);
+  const [currentPage, setCurrentPage] = useState(1);
 
   useEffect(() => {
     // Decide what to show inside the code panel based on app state
@@ -40,6 +41,8 @@ const TailoredOutput = ({ output, resumeContent, loading }) => {
     if (!text) {
       setPdfBlobUrl("");
       setCompileError("");
+      setNumPages(null);
+      setCurrentPage(1);
       return;
     }
 
@@ -47,6 +50,8 @@ const TailoredOutput = ({ output, resumeContent, loading }) => {
     const timer = setTimeout(async () => {
       try {
         setCompileError("");
+        setNumPages(null);
+        setCurrentPage(1);
         const blob = await api.compilePdf(text);
         const url = URL.createObjectURL(blob);
         setPdfBlobUrl((prev) => {
@@ -56,6 +61,7 @@ const TailoredOutput = ({ output, resumeContent, loading }) => {
       } catch (e) {
         setCompileError(e.message || "Compilation failed");
         setPdfBlobUrl("");
+        setNumPages(null);
       }
     }, 600);
 
@@ -95,6 +101,9 @@ const TailoredOutput = ({ output, resumeContent, loading }) => {
   const mode = loading ? "loading" : output ? "output" : resumeContent ? "uploaded" : "empty";
   const panelTitle = mode === "uploaded" ? "Your resume" : "Tailored LaTeX";
 
+  const goPrev = () => setCurrentPage((p) => Math.max(1, p - 1));
+  const goNext = () => setCurrentPage((p) => (numPages ? Math.min(numPages, p + 1) : p + 1));
+
   return (
     <>
       {/* Editor Panel */}
@@ -132,11 +141,18 @@ const TailoredOutput = ({ output, resumeContent, loading }) => {
       <section className="panel">
         <div className="panel-header panel-header-actions">
           <h2>Live PDF Preview</h2>
-          {pdfBlobUrl && (
-            <a href={pdfBlobUrl} download="tailored-resume.pdf" className="btn btn-secondary">
-              Download
-            </a>
-          )}
+          <div className="preview-actions">
+            {pdfBlobUrl && numPages && numPages > 1 && (
+              <div className="pager">
+                <button className="btn btn-secondary" onClick={goPrev} disabled={currentPage <= 1}>Prev</button>
+                <span className="pager-text">{currentPage} / {numPages}</span>
+                <button className="btn btn-secondary" onClick={goNext} disabled={currentPage >= numPages}>Next</button>
+              </div>
+            )}
+            {pdfBlobUrl && (
+              <a href={pdfBlobUrl} download="tailored-resume.pdf" className="btn btn-secondary">Download</a>
+            )}
+          </div>
         </div>
         <div className="panel-body panel-body-fill preview-surface" ref={previewRef}>
           {compileError ? (
@@ -147,14 +163,14 @@ const TailoredOutput = ({ output, resumeContent, loading }) => {
               onLoadSuccess={({ numPages }) => setNumPages(numPages)}
               onLoadError={(err) => setCompileError(err?.message || "Failed to load PDF file")}
             >
-              <Page pageNumber={1} width={pageWidth || 720} renderTextLayer={false} renderAnnotationLayer={false} />
+              <Page pageNumber={currentPage} width={pageWidth || 720} renderTextLayer={false} renderAnnotationLayer={false} />
             </Document>
           ) : (
             <div className="notice">PDF preview will appear here.</div>
           )}
 
-          {numPages && numPages > 1 && (
-            <div className="preview-meta">Showing page 1 of {numPages}</div>
+          {pdfBlobUrl && numPages && numPages > 1 && (
+            <div className="preview-meta">Showing page {currentPage} of {numPages}</div>
           )}
         </div>
       </section>
