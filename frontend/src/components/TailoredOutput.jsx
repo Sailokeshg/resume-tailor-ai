@@ -15,6 +15,8 @@ const TailoredOutput = ({ output }) => {
   const [pdfBlobUrl, setPdfBlobUrl] = useState("");
   const [compileError, setCompileError] = useState("");
   const [numPages, setNumPages] = useState(null);
+  const previewRef = useRef(null);
+  const [pageWidth, setPageWidth] = useState(0);
 
   useEffect(() => {
     setText(output || "");
@@ -55,6 +57,27 @@ const TailoredOutput = ({ output }) => {
     return Prism.highlight(code, language, "latex");
   };
 
+  // Fit PDF page to container width
+  useEffect(() => {
+    if (!previewRef.current) return;
+    const element = previewRef.current;
+    const update = () => {
+      // subtract small padding
+      const width = Math.floor(element.clientWidth - 16);
+      setPageWidth(width > 0 ? width : 0);
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(element);
+    window.addEventListener("orientationchange", update);
+    window.addEventListener("resize", update);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("orientationchange", update);
+      window.removeEventListener("resize", update);
+    };
+  }, []);
+
   return (
     <>
       {/* Editor Panel */}
@@ -88,7 +111,7 @@ const TailoredOutput = ({ output }) => {
             </a>
           )}
         </div>
-        <div className="panel-body panel-body-fill preview-surface">
+        <div className="panel-body panel-body-fill preview-surface" ref={previewRef}>
           {compileError ? (
             <div className="notice error">{compileError}</div>
           ) : pdfBlobUrl ? (
@@ -97,7 +120,7 @@ const TailoredOutput = ({ output }) => {
               onLoadSuccess={({ numPages }) => setNumPages(numPages)}
               onLoadError={(err) => setCompileError(err?.message || "Failed to load PDF file")}
             >
-              <Page pageNumber={1} width={720} renderTextLayer={false} renderAnnotationLayer={false} />
+              <Page pageNumber={1} width={pageWidth || 720} renderTextLayer={false} renderAnnotationLayer={false} />
             </Document>
           ) : (
             <div className="notice">PDF preview will appear here.</div>
