@@ -1,9 +1,9 @@
 FROM python:3.11-slim
 
-# Install tectonic LaTeX engine
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends tectonic \
-    && rm -rf /var/lib/apt/lists/*
+# # Install tectonic LaTeX engine
+# RUN apt-get update \
+#     && apt-get install -y --no-install-recommends tectonic \
+#     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 COPY requirements.txt ./
