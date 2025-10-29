@@ -52,6 +52,7 @@ const ResumeTailorPage = () => {
           >
             <option value="DEEPSEEK_R1_0528">DeepSeek: R1 0528</option>
             <option value="DEEPSEEK_V3_0324">DeepSeek: V3 0324</option>
+            <option value="DEEPSEEK_R1T2">DeepSeek: R1T2</option>
             <option value="QWEN3_235B_A22B">Qwen3 235B A22B</option>
             <option value="Z.AI_GLM_4_5_AIR">Z.AI: GLM 4.5 Air</option>
             <option value="MICROSOFT_MAI_DS_R1">Microsoft: MAI DS R1</option>
