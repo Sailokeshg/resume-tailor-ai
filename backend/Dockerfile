@@ -1,8 +1,11 @@
 FROM python:3.11-slim
 
-# Install tectonic LaTeX engine and ca-certificates
+# Install curl, ca-certificates, and tectonic LaTeX engine
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends tectonic ca-certificates \
+    && apt-get install -y --no-install-recommends curl ca-certificates fontconfig \
+    && curl --proto '=https' --tlsv1.2 -sSf https://drop-sh.tectonic-typesetting.org | sh \
+    && mv tectonic /usr/local/bin/ \
+    && apt-get purge -y --auto-remove curl \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
