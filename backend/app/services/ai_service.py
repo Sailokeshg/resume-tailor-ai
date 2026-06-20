@@ -1,3 +1,4 @@
+import json
 from openai import OpenAI
 from app.core.config import settings
 from app.services.rag_service import rag_service
@@ -35,16 +36,17 @@ def sanitize_model_output(text: str) -> str:
 def resolve_provider_model(selected: str, mapping: Dict[str, str]) -> str:
     """Resolve a frontend-provided model to a provider id.
     - If `selected` is already a full provider id (contains a slash), return it
-    - Else, look up the friendly key in `mapping`, default to DEEPSEEK_R1_0528
+    - Else, look up the friendly key in `mapping`, default to settings.default_tailor_model
     """
+    default_key = settings.default_tailor_model
     if not selected:
-        return mapping["DEEPSEEK_R1_0528"]
+        return mapping.get(default_key, default_key)
     if "/" in selected:
         return selected
-    return mapping.get(selected, mapping["DEEPSEEK_R1_0528"])
+    return mapping.get(selected, mapping.get(default_key, default_key))
 
 
-def tailor_resume(resume: str, job_description: str, model: str | None = "DEEPSEEK_R1_0528") -> str:
+def tailor_resume(resume: str, job_description: str, model: str | None = None) -> str:
     """
     Tailor resume using RAG and AI
     """
@@ -67,8 +69,8 @@ def tailor_resume(resume: str, job_description: str, model: str | None = "DEEPSE
         relevant_sections = rag_service.find_relevant_sections(
             job_description, resume_id)
 
-        # Extract job keywords
-        job_keywords = rag_service.extract_job_keywords(job_description)
+        # Extract job keywords using AI
+        job_keywords = extract_job_keywords_with_ai(job_description)
 
         # Create enhanced prompt with RAG context
         prompt = create_tailoring_prompt(
@@ -77,16 +79,25 @@ def tailor_resume(resume: str, job_description: str, model: str | None = "DEEPSE
         # Generate tailored resume
         # Friendly keys → provider model ids (extend easily here)
         model_mapping = {
-            "DEEPSEEK_R1_0528": "deepseek/deepseek-r1-0528:free",
+            "GEMMA_4_31B_IT": "google/gemma-4-31b-it:free",
             "DEEPSEEK_V3_0324": "deepseek/deepseek-chat-v3-0324:free",
             "QWEN3_235B_A22B": "qwen/qwen3-235b-a22b:free",
             "Z.AI_GLM_4_5_AIR": "z-ai/glm-4.5-air:free",
-            "DeepSeek R1T2": "tngtech/deepseek-r1t2-chimera:free",
-            "MICROSOFT_MAI_DS_R1": "microsoft/mai-ds-r1:free",
             "MOONSHOTAI_KIMI_VL_A3B_THINKING": "moonshotai/kimi-vl-a3b-thinking:free",
         }
 
         provider_model = resolve_provider_model(model or "", model_mapping)
+
+        system_prompt = (
+            "You are an expert resume writer and LaTeX formatting specialist.\n"
+            "Your objective is to tailor the candidate's LaTeX resume to align with a target job description.\n\n"
+            "CRITICAL FORMATTING RULES:\n"
+            "1. Output ONLY valid, compile-ready LaTeX code representing the tailored resume.\n"
+            "2. Do NOT use markdown code fences (e.g. ```latex) or pre/post commentary within the LaTeX section.\n"
+            "3. Preserve all existing LaTeX packages, layouts, structure, and headers. Only modify contents inside the document.\n"
+            "4. Be extremely careful with special character escaping. Ensure %, &, $, _, #, {, } are correctly escaped unless they form valid LaTeX commands.\n"
+            "5. Immediately after the \\end{document} tag, write a detailed, structured plain-text/markdown summary of the improvements made. Format it nicely (e.g. list modified sections, added keywords, and explanation)."
+        )
 
         completion = client.chat.completions.create(
             extra_headers={
@@ -94,7 +105,7 @@ def tailor_resume(resume: str, job_description: str, model: str | None = "DEEPSE
             },
             model=provider_model,
             messages=[
-                {"role": "system", "content": "You are a professional resume writer specializing in LaTeX formatting. Always preserve LaTeX syntax and formatting. Output only the final LaTeX content of the resume without any analysis, commentary, chain-of-thought, or <think>...</think> blocks. Do not use code fences. If you need to include any notes, put them after \\end{document}."},
+                {"role": "system", "content": system_prompt},
                 {"role": "user", "content": prompt}
             ]
         )
@@ -113,47 +124,138 @@ def create_tailoring_prompt(resume: str, job_description: str, relevant_sections
     """
     Create a comprehensive prompt for resume tailoring
     """
-    relevant_context = "\n".join(
-        [f"- {section['section_type']}: {section['content'][:200]}..." for section in relevant_sections[:3]])
+    focus_sections = ", ".join(set([sec['section_type'].replace('_', ' ').title(
+    ) for sec in relevant_sections])) if relevant_sections else "All sections"
 
     prompt = f"""
-You are a professional resume writer. Tailor the following LaTeX resume to better match the job description.
+You are a professional resume writer. Tailor the original LaTeX resume to match the target job description.
 
-JOB DESCRIPTION:
+<job_description>
 {job_description}
+</job_description>
 
-KEY JOB REQUIREMENTS:
+<target_keywords>
 {', '.join(job_keywords)}
+</target_keywords>
 
-RELEVANT RESUME SECTIONS (most important for this job):
-{relevant_context}
+<focus_sections>
+Focus your tailoring efforts on the following key sections: {focus_sections}. Ensure other sections remain intact unless adjustments are necessary.
+</focus_sections>
 
-ORIGINAL RESUME:
+<original_resume>
 {resume}
+</original_resume>
 
-INSTRUCTIONS:
-1. Preserve all LaTeX formatting and syntax exactly
-2. Enhance sections to better match the job requirements
-3. Add relevant keywords naturally into the content
-4. Keep the same structure and length
-5. Focus on the most relevant sections identified above
-6. Maintain professional tone and formatting
+INSTRUCTIONS & CONSTRAINTS:
+1. PRESERVE LATEX SYNTAX: Keep the exact LaTeX document structure, including the documentclass, packages, layout, and document environment. Do not introduce compile errors.
+2. ESCAPE SPECIAL CHARACTERS: Ensure special characters like '%', '&', '$', '_', '#', '{{', '}}' are escaped correctly (e.g. use \\& instead of & for ampersands, \\_ instead of _ for underscores, etc.) inside text content.
+3. ZERO HALLUCINATION: Do NOT invent new jobs, roles, dates, companies, degree credentials, or certifications. Only optimize, rephrase, and align existing experiences to emphasize matching skills.
+4. INTEGRATE KEYWORDS: Seamlessly incorporate target keywords into relevant bullet points. Focus on describing achievements using action verbs (e.g., Designed, Led, Automated) and quantifying impact (e.g., increased performance by 15%) without fabricating facts.
+5. LENGTH CONSTRAINT: Keep the tailored resume layout clean and page-length identical to the original resume.
 
 TAILORED RESUME:
 """
     return prompt
 
 
-def analyze_resume_job_match(resume: str, job_description: str) -> dict:
+def extract_job_keywords_with_ai(job_description: str) -> list:
     """
-    Analyze how well resume matches job description
+    Extract key terms and skills from job description using LLM
     """
     try:
-        # Extract keywords from both
+        completion = client.chat.completions.create(
+            extra_headers={
+                "X-Title": "Resume Tailor AI",
+            },
+            model=settings.keyword_extraction_model,
+            messages=[
+                {"role": "system", "content": "You are an expert recruiter. Extract a list of the top 15 most important technical skills, tools, frameworks, methodologies, and requirements from the job description. Output only a comma-separated list of these keywords. Do not include any introductory text or explanation."},
+                {"role": "user", "content": job_description}
+            ]
+        )
+        content = completion.choices[0].message.content.strip()
+        # Clean and split keywords
+        keywords = [kw.strip().lower()
+                    for kw in content.split(",") if kw.strip()]
+        # Filter out generic/too short words if any, but preserve main keywords
+        return [kw for kw in keywords if len(kw) > 1]
+    except Exception as e:
+        logger.error(f"Error extracting keywords with AI: {str(e)}")
+        # Fallback to hardcoded list in RAG service
+        return rag_service.extract_job_keywords(job_description)
+
+
+def analyze_resume_job_match(resume: str, job_description: str) -> dict:
+    """
+    Analyze how well resume matches job description using LLM
+    """
+    try:
+        # Extract dynamic keywords with AI
+        job_keywords = extract_job_keywords_with_ai(job_description)
+
+        prompt = f"""
+Analyze the match between the following candidate LaTeX resume and the target job description.
+
+Target Job Description:
+{job_description}
+
+Key Keywords requested:
+{', '.join(job_keywords)}
+
+Candidate Resume:
+{resume}
+
+Provide your analysis in JSON format with the following keys:
+1. "match_percentage": an integer from 0 to 100 representing how well the candidate matches the job description based on experience, skills, and match relevance.
+2. "matching_keywords": list of keywords from the key keywords list that are present in the resume.
+3. "missing_keywords": list of keywords from the key keywords list that are missing from the resume.
+4. "suggested_improvements": list of specific suggestions for how the candidate can improve their resume to better match the job description (e.g. rephrasing, highlighting specific experiences, etc.).
+
+Return ONLY the raw JSON object. Do not include markdown code fences or any other text.
+"""
+        completion = client.chat.completions.create(
+            extra_headers={
+                "X-Title": "Resume Tailor AI",
+            },
+            model=settings.match_analysis_model,
+            messages=[
+                {"role": "system", "content": "You are a professional ATS scanner and career coach. You only output valid JSON matching the requested schema."},
+                {"role": "user", "content": prompt}
+            ]
+        )
+        content = completion.choices[0].message.content.strip()
+
+        # Clean any potential code fences
+        if content.startswith("```"):
+            lines = content.splitlines()
+            if lines[0].startswith("```"):
+                lines = lines[1:]
+            if lines and lines[-1].strip() == "```":
+                lines = lines[:-1]
+            content = "\n".join(lines).strip()
+
+        analysis_data = json.loads(content)
+        return {
+            "match_percentage": int(analysis_data.get("match_percentage", 0)),
+            "matching_keywords": list(analysis_data.get("matching_keywords", [])),
+            "missing_keywords": list(analysis_data.get("missing_keywords", [])),
+            "suggested_improvements": list(analysis_data.get("suggested_improvements", []))
+        }
+
+    except Exception as e:
+        logger.error(f"Error analyzing resume-job match: {str(e)}")
+        # Fallback to rule-based analysis
+        return fallback_resume_job_match(resume, job_description)
+
+
+def fallback_resume_job_match(resume: str, job_description: str) -> dict:
+    """
+    Fallback rule-based resume job match analysis
+    """
+    try:
         resume_sections = parse_latex_resume(resume)
         job_keywords = rag_service.extract_job_keywords(job_description)
 
-        # Count keyword matches
         resume_keywords = []
         for section in resume_sections:
             resume_keywords.extend(section.keywords)
@@ -171,15 +273,14 @@ def analyze_resume_job_match(resume: str, job_description: str) -> dict:
             "missing_keywords": [kw for kw in job_keywords if kw not in resume_keywords],
             "suggested_improvements": generate_improvement_suggestions(matches, job_keywords)
         }
-
     except Exception as e:
-        logger.error(f"Error analyzing resume-job match: {str(e)}")
+        logger.error(f"Error in fallback matching: {str(e)}")
         return {"error": "Failed to analyze match"}
 
 
 def generate_improvement_suggestions(matches: set, job_keywords: list) -> list:
     """
-    Generate specific improvement suggestions
+    Generate specific improvement suggestions for fallback case
     """
     suggestions = []
     missing = [kw for kw in job_keywords if kw not in matches]

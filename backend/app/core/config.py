@@ -7,6 +7,11 @@ class Settings(BaseSettings):
     openai_api_key: str
     openai_base_url: str = "https://openrouter.ai/api/v1"
     
+    # Model Configurations
+    default_tailor_model: str = "GEMMA_4_31B_IT"
+    keyword_extraction_model: str = "deepseek/deepseek-chat-v3-0324:free"
+    match_analysis_model: str = "deepseek/deepseek-chat-v3-0324:free"
+    
     # Database Configuration
     chroma_db_path: str = "./chroma_db"
     

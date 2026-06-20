@@ -85,7 +85,7 @@ const FileUpload = ({ onFileSelect, loading }) => {
               <p className="dropzone-title">Drop your .tex file here</p>
               <p className="dropzone-sub">or click to browse</p>
             </div>
-            <button type="button" className="btn btn-secondary" onClick={openFileDialog}>
+            <button type="button" className="btn btn-secondary" onClick={(e) => { e.stopPropagation(); openFileDialog(); }}>
               Choose File
             </button>
           </div>
