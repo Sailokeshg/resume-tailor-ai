@@ -11,14 +11,21 @@ def tailor_resume_endpoint(request: TailorRequest):
     try:
         tailored = tailor_resume(request.resume, request.job_description, request.model)
 
+        # Extract company name
+        from app.services.ai_service import extract_company_name_with_ai, analyze_resume_job_match
+        company_name = extract_company_name_with_ai(request.job_description)
+
         # Generate suggestions (reuse analyze logic)
-        from app.services.ai_service import analyze_resume_job_match
         analysis = analyze_resume_job_match(
             request.resume, request.job_description)
         suggestions = analysis.get(
             "suggested_improvements", []) if isinstance(analysis, dict) else []
 
-        return TailorResponse(tailored_resume=tailored, suggestions=suggestions)
+        return TailorResponse(
+            tailored_resume=tailored, 
+            suggestions=suggestions, 
+            company_name=company_name
+        )
     except Exception:
         raise HTTPException(status_code=500, detail="Failed to tailor resume.")
 

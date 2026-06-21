@@ -83,7 +83,12 @@ class RAGService:
             results = self.collection.query(
                 query_embeddings=[job_embedding],
                 n_results=top_k,
-                where={"resume_id": resume_id, "type": "resume_section"}
+                where={
+                    "$and": [
+                        {"resume_id": resume_id},
+                        {"type": "resume_section"}
+                    ]
+                }
             )
             
             relevant_sections = []

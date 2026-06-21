@@ -9,7 +9,7 @@ import api from "../services/api";
 // This avoids version mismatches between the core library and the worker
 pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
-const TailoredOutput = ({ output, resumeContent, loading }) => {
+const TailoredOutput = ({ output, resumeContent, loading, companyName }) => {
   const codeRef = useRef(null);
   const [text, setText] = useState(output || "");
   const [pdfBlobUrl, setPdfBlobUrl] = useState("");
@@ -52,13 +52,14 @@ const TailoredOutput = ({ output, resumeContent, loading }) => {
         setCompileError("");
         setNumPages(null);
         setCurrentPage(1);
-        const blob = await api.compilePdf(text);
+        const blob = await api.compilePdf(text, controller.signal);
         const url = URL.createObjectURL(blob);
         setPdfBlobUrl((prev) => {
           if (prev) URL.revokeObjectURL(prev);
           return url;
         });
       } catch (e) {
+        if (e.name === "AbortError") return;
         setCompileError(e.message || "Compilation failed");
         setPdfBlobUrl("");
         setNumPages(null);
@@ -150,7 +151,13 @@ const TailoredOutput = ({ output, resumeContent, loading }) => {
               </div>
             )}
             {pdfBlobUrl && (
-              <a href={pdfBlobUrl} download="tailored-resume.pdf" className="btn btn-secondary">Download</a>
+              <a 
+                href={pdfBlobUrl} 
+                download={`Sai_Lokesh_Reddy_${companyName ? companyName.trim().replace(/[^a-zA-Z0-9]/g, "_") : ""}.pdf`} 
+                className="btn btn-secondary"
+              >
+                Download
+              </a>
             )}
           </div>
         </div>

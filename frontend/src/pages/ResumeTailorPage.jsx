@@ -10,7 +10,7 @@ const ResumeTailorPage = () => {
   const [resumeContent, setResumeContent] = useState("");
   const [jobDesc, setJobDesc] = useState("");
   const [model, setModel] = useState("GEMMA_4_31B_IT");
-  const { output, suggestions, improvementsSummary, loading, error, tailorResume } =
+  const { output, suggestions, improvementsSummary, companyName, loading, error, tailorResume } =
     useResumeTailor();
   const [showInputs, setShowInputs] = useState(true);
 
@@ -113,7 +113,7 @@ const ResumeTailorPage = () => {
         )}
 
         {/* Editor + Preview Panels */}
-        <TailoredOutput output={output} resumeContent={resumeContent} loading={loading} />
+        <TailoredOutput output={output} resumeContent={resumeContent} loading={loading} companyName={companyName} />
       </main>
 
       <footer className="app-footer">

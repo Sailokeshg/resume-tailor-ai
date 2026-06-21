@@ -7,6 +7,7 @@ export default function useResumeTailor() {
   const [improvementsSummary, setImprovementsSummary] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [companyName, setCompanyName] = useState("");
 
   const tailorResume = async (resume, jobDesc, model) => {
     setLoading(true);
@@ -14,6 +15,7 @@ export default function useResumeTailor() {
     setOutput("");
     setSuggestions([]);
     setImprovementsSummary("");
+    setCompanyName("");
 
     try {
       const res = await api.tailorResume(resume, jobDesc, model);
@@ -57,6 +59,7 @@ export default function useResumeTailor() {
 
       // Preserve original suggestions array (not shown in UI for improvements summary)
       setSuggestions(res.suggestions || []);
+      setCompanyName(res.company_name || "");
     } catch (err) {
       setError("Failed to tailor resume.");
     } finally {
@@ -64,5 +67,5 @@ export default function useResumeTailor() {
     }
   };
 
-  return { output, suggestions, improvementsSummary, loading, error, tailorResume };
+  return { output, suggestions, improvementsSummary, companyName, loading, error, tailorResume };
 }

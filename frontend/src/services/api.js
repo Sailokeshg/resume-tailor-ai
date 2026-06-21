@@ -43,13 +43,14 @@ class ApiService {
     return response.json();
   }
 
-  async compilePdf(latexContent) {
+  async compilePdf(latexContent, signal) {
     const response = await fetch(`${this.baseURL}/api/v1/tailor/compile`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/pdf'
       },
+      signal,
       body: JSON.stringify({ resume: latexContent }),
     });
 

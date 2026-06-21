@@ -11,3 +11,4 @@ class TailorRequest(BaseModel):
 class TailorResponse(BaseModel):
     tailored_resume: str
     suggestions: list[str] = []
+    company_name: Optional[str] = ""

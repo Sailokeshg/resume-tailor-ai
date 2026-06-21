@@ -298,3 +298,33 @@ def generate_improvement_suggestions(matches: set, job_keywords: list) -> list:
             "Good keyword match! Focus on quantifying achievements")
 
     return suggestions
+
+
+def extract_company_name_with_ai(job_description: str) -> str:
+    """
+    Extract company name from job description using LLM
+    """
+    if not job_description or not job_description.strip():
+        return ""
+    try:
+        completion = client.chat.completions.create(
+            extra_headers={
+                "X-Title": "Resume Tailor AI",
+            },
+            model=settings.keyword_extraction_model,
+            messages=[
+                {"role": "system", "content": "You are an assistant that extracts the employing company name from a job description. Output ONLY the company name (1-3 words). If the company name is not mentioned or cannot be found, output 'Unknown'. Do not include any punctuation or extra words."},
+                {"role": "user", "content": job_description}
+            ]
+        )
+        name = completion.choices[0].message.content.strip()
+        if name.lower() == "unknown":
+            return ""
+        # Clean any quotes or extra characters
+        name = name.replace('"', '').replace("'", "").strip()
+        # Clean characters that are invalid in filenames
+        name = re.sub(r'[\\/*?:"<>|]', "", name)
+        return name
+    except Exception as e:
+        logger.error(f"Error extracting company name: {str(e)}")
+        return ""
