@@ -5,11 +5,41 @@ import LoadingSpinner from "../components/LoadingSpinner.jsx";
 import useResumeTailor from "../hooks/useResumeTailor.js";
 import DescriptionIcon from "@mui/icons-material/Description";
 
+const PROVIDER_STORAGE_KEY = "resume-tailor-ai-provider";
+const MODEL_STORAGE_KEY = "resume-tailor-ai-model";
+
+const providerOptions = [
+  { value: "openrouter", label: "OpenRouter" },
+  { value: "requesty", label: "Requesty" },
+];
+
+const modelOptionsByProvider = {
+  openrouter: [
+    { value: "GEMMA_4_31B_IT", label: "Gemma 4 31B IT" },
+    { value: "DEEPSEEK_V3_0324", label: "DeepSeek: V3 0324" },
+    { value: "QWEN3_235B_A22B", label: "Qwen3 235B A22B" },
+    { value: "Z.AI_GLM_4_5_AIR", label: "Z.AI: GLM 4.5 Air" },
+    { value: "MOONSHOTAI_KIMI_VL_A3B_THINKING", label: "Moonshot AI: Kimi VL A3B Thinking" },
+  ],
+  requesty: [
+    { value: "GEMMA_4_31B_IT", label: "Gemma 4 31B IT" },
+  ],
+};
+
+const getStoredValue = (key, fallback) => {
+  try {
+    return localStorage.getItem(key) || fallback;
+  } catch (_) {
+    return fallback;
+  }
+};
+
 const ResumeTailorPage = () => {
   const [selectedFile, setSelectedFile] = useState(null);
   const [resumeContent, setResumeContent] = useState("");
   const [jobDesc, setJobDesc] = useState("");
-  const [model, setModel] = useState("GEMMA_4_31B_IT");
+  const [provider, setProvider] = useState(() => getStoredValue(PROVIDER_STORAGE_KEY, "openrouter"));
+  const [model, setModel] = useState(() => getStoredValue(MODEL_STORAGE_KEY, "GEMMA_4_31B_IT"));
   const {
     output,
     suggestions,
@@ -29,6 +59,29 @@ const ResumeTailorPage = () => {
   const [outreachChannel, setOutreachChannel] = useState("email");
   const [copied, setCopied] = useState(false);
 
+  const modelOptions = modelOptionsByProvider[provider] || modelOptionsByProvider.openrouter;
+
+  useEffect(() => {
+    if (!providerOptions.some((option) => option.value === provider)) {
+      setProvider("openrouter");
+      return;
+    }
+
+    try {
+      localStorage.setItem(PROVIDER_STORAGE_KEY, provider);
+    } catch (_) {}
+  }, [provider]);
+
+  useEffect(() => {
+    if (!modelOptions.some((option) => option.value === model)) {
+      setModel(modelOptions[0].value);
+      return;
+    }
+
+    try {
+      localStorage.setItem(MODEL_STORAGE_KEY, model);
+    } catch (_) {}
+  }, [model, modelOptions]);
 
   const handleFileSelect = (file) => {
     setSelectedFile(file);
@@ -44,7 +97,7 @@ const ResumeTailorPage = () => {
     if (!resumeContent || !jobDesc) {
       return;
     }
-    tailorResume(resumeContent, jobDesc, model);
+    tailorResume(resumeContent, jobDesc, model, provider);
   };
 
   const handleCopy = () => {
@@ -72,15 +125,23 @@ const ResumeTailorPage = () => {
         <div className="header-actions">
           <select
             className="model-select"
+            value={provider}
+            onChange={(e) => setProvider(e.target.value)}
+            disabled={loading}
+          >
+            {providerOptions.map((option) => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
+          </select>
+          <select
+            className="model-select"
             value={model}
             onChange={(e) => setModel(e.target.value)}
             disabled={loading}
           >
-            <option value="GEMMA_4_31B_IT">Gemma 4 31B IT</option>
-            <option value="DEEPSEEK_V3_0324">DeepSeek: V3 0324</option>
-            <option value="QWEN3_235B_A22B">Qwen3 235B A22B</option>
-            <option value="Z.AI_GLM_4_5_AIR">Z.AI: GLM 4.5 Air</option>
-            <option value="MOONSHOTAI_KIMI_VL_A3B_THINKING">Moonshot AI: Kimi VL A3B Thinking</option>
+            {modelOptions.map((option) => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
           </select>
           <button
             type="button"
@@ -181,7 +242,7 @@ const ResumeTailorPage = () => {
                         />
                         <div className="flex justify-between items-center mt-2">
                           <button
-                            onClick={() => generateOutreach(output, jobDesc, outreachRecipient, outreachChannel)}
+                            onClick={() => generateOutreach(output, jobDesc, outreachRecipient, outreachChannel, provider)}
                             className="btn btn-secondary text-xs"
                             style={{ padding: "6px 12px" }}
                             disabled={outreachLoading}
@@ -200,7 +261,7 @@ const ResumeTailorPage = () => {
                     ) : (
                       <div className="flex justify-center py-2">
                         <button
-                          onClick={() => generateOutreach(output, jobDesc, outreachRecipient, outreachChannel)}
+                          onClick={() => generateOutreach(output, jobDesc, outreachRecipient, outreachChannel, provider)}
                           className="btn btn-primary w-full text-xs"
                           disabled={outreachLoading}
                         >
@@ -227,4 +288,3 @@ const ResumeTailorPage = () => {
 };
 
 export default ResumeTailorPage;
-

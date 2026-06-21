@@ -10,10 +10,49 @@ import re
 
 logger = logging.getLogger(__name__)
 
-client = OpenAI(
-    base_url="https://openrouter.ai/api/v1",
-    api_key=settings.openai_api_key,
-)
+OPENROUTER_MODEL_MAPPING = {
+    "GEMMA_4_31B_IT": "google/gemma-4-31b-it:free",
+    "DEEPSEEK_V3_0324": "deepseek/deepseek-chat-v3-0324:free",
+    "QWEN3_235B_A22B": "qwen/qwen3-235b-a22b:free",
+    "Z.AI_GLM_4_5_AIR": "z-ai/glm-4.5-air:free",
+    "MOONSHOTAI_KIMI_VL_A3B_THINKING": "moonshotai/kimi-vl-a3b-thinking:free",
+}
+
+REQUESTY_MODEL_MAPPING = {
+    "GEMMA_4_31B_IT": settings.requesty_tailor_model,
+    "NVIDIA_NEMOTRON_3_ULTRA_550B_A55B": settings.requesty_auxiliary_model,
+}
+
+
+def normalize_provider(provider: str | None) -> str:
+    value = (provider or "openrouter").strip().lower()
+    if value in {"requesty", "requestly"}:
+        return "requesty"
+    return "openrouter"
+
+
+def get_ai_client(provider: str | None) -> OpenAI:
+    normalized = normalize_provider(provider)
+    if normalized == "requesty":
+        if not settings.requesty_api_key:
+            raise ValueError("REQUESTY_API_KEY is required when provider is requesty.")
+        return OpenAI(
+            base_url=settings.requesty_base_url,
+            api_key=settings.requesty_api_key,
+        )
+
+    return OpenAI(
+        base_url=settings.openai_base_url,
+        api_key=settings.openai_api_key,
+    )
+
+
+def create_chat_completion(provider: str | None, model: str, messages: list[dict], extra_headers: dict | None = None):
+    return get_ai_client(provider).chat.completions.create(
+        extra_headers=extra_headers or {"X-Title": "Resume Tailor AI"},
+        model=model,
+        messages=messages,
+    )
 
 
 def sanitize_model_output(text: str) -> str:
@@ -33,22 +72,45 @@ def sanitize_model_output(text: str) -> str:
         return text
 
 
-def resolve_provider_model(selected: str, mapping: Dict[str, str]) -> str:
+def resolve_provider_model(selected: str, mapping: Dict[str, str], default_model: str) -> str:
     """Resolve a frontend-provided model to a provider id.
     - If `selected` is already a full provider id (contains a slash), return it
-    - Else, look up the friendly key in `mapping`, default to settings.default_tailor_model
+    - Else, look up the friendly key in `mapping`, default to default_model
     """
-    default_key = settings.default_tailor_model
+    default_provider_model = mapping.get(default_model, default_model)
     if not selected:
-        return mapping.get(default_key, default_key)
+        return default_provider_model
     if "/" in selected:
         return selected
-    return mapping.get(selected, mapping.get(default_key, default_key))
+    return mapping.get(selected, default_provider_model)
 
 
-def tailor_resume(resume: str, job_description: str, model: str | None = None) -> str:
+def resolve_tailor_model(selected: str | None, provider: str | None) -> str:
+    normalized = normalize_provider(provider)
+    if normalized == "requesty":
+        return resolve_provider_model(
+            selected or "GEMMA_4_31B_IT",
+            REQUESTY_MODEL_MAPPING,
+            settings.requesty_tailor_model,
+        )
+
+    return resolve_provider_model(
+        selected or "",
+        OPENROUTER_MODEL_MAPPING,
+        settings.default_tailor_model,
+    )
+
+
+def resolve_auxiliary_model(provider: str | None, openrouter_model: str) -> str:
+    if normalize_provider(provider) == "requesty":
+        return settings.requesty_auxiliary_model
+    return openrouter_model
+
+
+def tailor_resume(resume: str, job_description: str, model: str | None = None, provider: str | None = None, job_keywords: list | None = None) -> str:
     """
-    Tailor resume using RAG and AI
+    Tailor resume using RAG and AI.
+    Accepts optional pre-extracted job_keywords to skip an extra LLM call.
     """
     try:
         # Generate unique IDs
@@ -69,24 +131,15 @@ def tailor_resume(resume: str, job_description: str, model: str | None = None) -
         relevant_sections = rag_service.find_relevant_sections(
             job_description, resume_id)
 
-        # Extract job keywords using AI
-        job_keywords = extract_job_keywords_with_ai(job_description)
+        # Use pre-extracted keywords if provided, else fall back to LLM extraction
+        if not job_keywords:
+            job_keywords = extract_job_keywords_with_ai(job_description, provider)
 
         # Create enhanced prompt with RAG context
         prompt = create_tailoring_prompt(
             resume, job_description, relevant_sections, job_keywords)
 
-        # Generate tailored resume
-        # Friendly keys → provider model ids (extend easily here)
-        model_mapping = {
-            "GEMMA_4_31B_IT": "google/gemma-4-31b-it:free",
-            "DEEPSEEK_V3_0324": "deepseek/deepseek-chat-v3-0324:free",
-            "QWEN3_235B_A22B": "qwen/qwen3-235b-a22b:free",
-            "Z.AI_GLM_4_5_AIR": "z-ai/glm-4.5-air:free",
-            "MOONSHOTAI_KIMI_VL_A3B_THINKING": "moonshotai/kimi-vl-a3b-thinking:free",
-        }
-
-        provider_model = resolve_provider_model(model or "", model_mapping)
+        provider_model = resolve_tailor_model(model, provider)
 
         system_prompt = (
             "You are an expert resume writer and LaTeX formatting specialist.\n"
@@ -99,12 +152,10 @@ def tailor_resume(resume: str, job_description: str, model: str | None = None) -
             "5. Immediately after the \\end{document} tag, write a detailed, structured plain-text/markdown summary of the improvements made. Format it nicely (e.g. list modified sections, added keywords, and explanation)."
         )
 
-        completion = client.chat.completions.create(
-            extra_headers={
-                "X-Title": "Resume Tailor AI",
-            },
-            model=provider_model,
-            messages=[
+        completion = create_chat_completion(
+            provider,
+            provider_model,
+            [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": prompt}
             ]
@@ -158,17 +209,15 @@ TAILORED RESUME:
     return prompt
 
 
-def extract_job_keywords_with_ai(job_description: str) -> list:
+def extract_job_keywords_with_ai(job_description: str, provider: str | None = None) -> list:
     """
     Extract key terms and skills from job description using LLM
     """
     try:
-        completion = client.chat.completions.create(
-            extra_headers={
-                "X-Title": "Resume Tailor AI",
-            },
-            model=settings.keyword_extraction_model,
-            messages=[
+        completion = create_chat_completion(
+            provider,
+            resolve_auxiliary_model(provider, settings.keyword_extraction_model),
+            [
                 {"role": "system", "content": "You are an expert recruiter. Extract a list of the top 15 most important technical skills, tools, frameworks, methodologies, and requirements from the job description. Output only a comma-separated list of these keywords. Do not include any introductory text or explanation."},
                 {"role": "user", "content": job_description}
             ]
@@ -185,13 +234,13 @@ def extract_job_keywords_with_ai(job_description: str) -> list:
         return rag_service.extract_job_keywords(job_description)
 
 
-def analyze_resume_job_match(resume: str, job_description: str) -> dict:
+def analyze_resume_job_match(resume: str, job_description: str, provider: str | None = None) -> dict:
     """
     Analyze how well resume matches job description using LLM
     """
     try:
         # Extract dynamic keywords with AI
-        job_keywords = extract_job_keywords_with_ai(job_description)
+        job_keywords = extract_job_keywords_with_ai(job_description, provider)
 
         prompt = f"""
 Analyze the match between the following candidate LaTeX resume and the target job description.
@@ -213,12 +262,10 @@ Provide your analysis in JSON format with the following keys:
 
 Return ONLY the raw JSON object. Do not include markdown code fences or any other text.
 """
-        completion = client.chat.completions.create(
-            extra_headers={
-                "X-Title": "Resume Tailor AI",
-            },
-            model=settings.match_analysis_model,
-            messages=[
+        completion = create_chat_completion(
+            provider,
+            resolve_auxiliary_model(provider, settings.match_analysis_model),
+            [
                 {"role": "system", "content": "You are a professional ATS scanner and career coach. You only output valid JSON matching the requested schema."},
                 {"role": "user", "content": prompt}
             ]
@@ -300,19 +347,17 @@ def generate_improvement_suggestions(matches: set, job_keywords: list) -> list:
     return suggestions
 
 
-def extract_company_name_with_ai(job_description: str) -> str:
+def extract_company_name_with_ai(job_description: str, provider: str | None = None) -> str:
     """
     Extract company name from job description using LLM
     """
     if not job_description or not job_description.strip():
         return ""
     try:
-        completion = client.chat.completions.create(
-            extra_headers={
-                "X-Title": "Resume Tailor AI",
-            },
-            model=settings.keyword_extraction_model,
-            messages=[
+        completion = create_chat_completion(
+            provider,
+            resolve_auxiliary_model(provider, settings.keyword_extraction_model),
+            [
                 {"role": "system", "content": "You are an assistant that extracts the employing company name from a job description. Output ONLY the company name (1-3 words). If the company name is not mentioned or cannot be found, output 'Unknown'. Do not include any punctuation or extra words."},
                 {"role": "user", "content": job_description}
             ]
@@ -330,7 +375,7 @@ def extract_company_name_with_ai(job_description: str) -> str:
         return ""
 
 
-def generate_outreach(resume: str, job_description: str, recipient: str, channel: str) -> dict:
+def generate_outreach(resume: str, job_description: str, recipient: str, channel: str, provider: str | None = None) -> dict:
     """
     Generate outreach message to a recruiter or CEO based on job description and resume.
     """
@@ -338,15 +383,7 @@ def generate_outreach(resume: str, job_description: str, recipient: str, channel
         recip_label = "Recruiter" if recipient.lower() == "recruiter" else "CEO"
         chan_label = "Email" if channel.lower() == "email" else "LinkedIn InMail"
 
-        model_mapping = {
-            "GEMMA_4_31B_IT": "google/gemma-4-31b-it:free",
-            "DEEPSEEK_V3_0324": "deepseek/deepseek-chat-v3-0324:free",
-            "QWEN3_235B_A22B": "qwen/qwen3-235b-a22b:free",
-            "Z.AI_GLM_4_5_AIR": "z-ai/glm-4.5-air:free",
-            "MOONSHOTAI_KIMI_VL_A3B_THINKING": "moonshotai/kimi-vl-a3b-thinking:free",
-        }
-
-        provider_model = resolve_provider_model(settings.outreach_model, model_mapping)
+        provider_model = resolve_auxiliary_model(provider, settings.outreach_model)
 
         system_prompt = (
             "You are an expert career coach and professional copywriter.\n"
@@ -377,12 +414,10 @@ Tailored Resume (LaTeX/Text):
 Please generate the outreach message in the requested JSON format. Output ONLY the raw JSON object. Do not include markdown code fences or any other text.
 """
 
-        completion = client.chat.completions.create(
-            extra_headers={
-                "X-Title": "Resume Tailor AI",
-            },
-            model=provider_model,
-            messages=[
+        completion = create_chat_completion(
+            provider,
+            provider_model,
+            [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
             ]
@@ -412,12 +447,27 @@ Please generate the outreach message in the requested JSON format. Output ONLY t
         }
 
 
-def check_visa_sponsorship(job_description: str) -> dict:
+# Heuristic keywords that signal the job description may mention visa/sponsorship.
+_VISA_HINT_PATTERN = re.compile(
+    r"\b(sponsor|h[\-\s]?1b|h[\-\s]?1|work\s+auth|work\s+permit|visa|green\s+card|"
+    r"citizenship|authorized\s+to\s+work|unrestricted|ead|opt|cpt|immigration)\b",
+    re.IGNORECASE,
+)
+
+
+def check_visa_sponsorship(job_description: str, provider: str | None = None) -> dict:
     """
-    Analyze job description to determine if company explicitly denies visa sponsorship.
+    Check if job description explicitly denies visa sponsorship.
+    Uses heuristic regex first - only calls LLM when visa-related terms are found.
     """
     if not job_description or not job_description.strip():
         return {"sponsorship_denied": False, "reason": ""}
+
+    # Fast heuristic: if no visa-related keywords at all, skip the LLM call
+    if not _VISA_HINT_PATTERN.search(job_description):
+        logger.info("No visa-related terms found - skipping visa LLM check.")
+        return {"sponsorship_denied": False, "reason": ""}
+
     try:
         prompt = f"""
 Analyze the job description below and determine if the company explicitly states they will NOT provide visa sponsorship (e.g., require existing unrestricted work authorization, state 'no visa sponsorship', require US citizenship or Green Card, state 'will not sponsor H-1B', require no sponsorship to work, etc.).
@@ -435,18 +485,15 @@ Output ONLY a JSON object with:
 
 Do not include any markdown fences or other text.
 """
-        completion = client.chat.completions.create(
-            extra_headers={
-                "X-Title": "Resume Tailor AI",
-            },
-            model=settings.match_analysis_model,
-            messages=[
+        completion = create_chat_completion(
+            provider,
+            resolve_auxiliary_model(provider, settings.match_analysis_model),
+            [
                 {"role": "system", "content": "You are a professional recruiting compliance assistant. You only output valid JSON."},
                 {"role": "user", "content": prompt}
             ]
         )
         content = completion.choices[0].message.content.strip()
-        # clean code fences
         if content.startswith("```"):
             lines = content.splitlines()
             if lines[0].startswith("```"):
@@ -465,3 +512,77 @@ Do not include any markdown fences or other text.
         return {"sponsorship_denied": False, "reason": ""}
 
 
+def analyze_job_and_resume(resume: str, job_description: str, provider: str | None = None) -> dict:
+    """
+    Single consolidated LLM call that extracts:
+    - Target keywords (top 15)
+    - Company name
+    - Match percentage, matching/missing keywords, suggested improvements
+    Replaces 3 separate LLM calls (keyword extraction, company name, match analysis).
+    """
+    try:
+        prompt = f"""
+You are an expert ATS scanner, recruiter, and career coach. Analyze the job description and candidate resume below.
+
+Job Description:
+{job_description}
+
+Candidate Resume (LaTeX):
+{resume}
+
+Return ONLY a valid JSON object with these exact keys:
+{{
+  "company_name": "<company name, 1-3 words, or empty string if not found>",
+  "keywords": ["<top 15 technical skills, tools, frameworks, methodologies from the job description>"],
+  "match_percentage": <integer 0-100>,
+  "matching_keywords": ["<keywords from the list that appear in the resume>"],
+  "missing_keywords": ["<keywords from the list NOT in the resume>"],
+  "suggested_improvements": ["<up to 4 specific actionable suggestions to better align resume with job description>"]
+}}
+
+Do not include markdown fences or any text outside the JSON object.
+"""
+        completion = create_chat_completion(
+            provider,
+            resolve_auxiliary_model(provider, settings.match_analysis_model),
+            [
+                {"role": "system", "content": "You are a professional ATS scanner and career coach. Output only valid JSON matching the requested schema."},
+                {"role": "user", "content": prompt},
+            ],
+        )
+        content = completion.choices[0].message.content.strip()
+        if content.startswith("```"):
+            lines = content.splitlines()
+            if lines[0].startswith("```"):
+                lines = lines[1:]
+            if lines and lines[-1].strip() == "```":
+                lines = lines[:-1]
+            content = "\n".join(lines).strip()
+
+        data = json.loads(content)
+        # Sanitize company name for filename safety
+        company_name = str(data.get("company_name", "")).strip()
+        company_name = company_name.replace('"', '').replace("'", "").strip()
+        company_name = re.sub(r'[\\/*?"<>|]', "", company_name)
+
+        return {
+            "company_name": company_name,
+            "keywords": [str(k).strip().lower() for k in data.get("keywords", []) if str(k).strip()],
+            "match_percentage": int(data.get("match_percentage", 0)),
+            "matching_keywords": list(data.get("matching_keywords", [])),
+            "missing_keywords": list(data.get("missing_keywords", [])),
+            "suggested_improvements": list(data.get("suggested_improvements", [])),
+        }
+    except Exception as e:
+        logger.error(f"Error in consolidated job/resume analysis: {str(e)}")
+        # Graceful fallback: use rule-based keyword extraction, empty company name
+        fallback_kw = rag_service.extract_job_keywords(job_description)
+        fallback_match = fallback_resume_job_match(resume, job_description)
+        return {
+            "company_name": "",
+            "keywords": fallback_kw,
+            "match_percentage": fallback_match.get("match_percentage", 0),
+            "matching_keywords": fallback_match.get("matching_keywords", []),
+            "missing_keywords": fallback_match.get("missing_keywords", []),
+            "suggested_improvements": fallback_match.get("suggested_improvements", []),
+        }

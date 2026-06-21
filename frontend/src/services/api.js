@@ -22,7 +22,7 @@ class ApiService {
     return response.json();
   }
 
-  async tailorResume(resumeContent, jobDescription, model) {
+  async tailorResume(resumeContent, jobDescription, model, provider) {
     const response = await fetch(`${this.baseURL}/api/v1/tailor/`, {
       method: 'POST',
       headers: {
@@ -32,6 +32,7 @@ class ApiService {
         resume: resumeContent,
         job_description: jobDescription,
         model,
+        provider,
       }),
     });
 
@@ -68,7 +69,7 @@ class ApiService {
     return blob;
   }
 
-  async generateOutreach(resumeContent, jobDescription, recipient, channel) {
+  async generateOutreach(resumeContent, jobDescription, recipient, channel, provider) {
     const response = await fetch(`${this.baseURL}/api/v1/tailor/outreach`, {
       method: 'POST',
       headers: {
@@ -79,6 +80,7 @@ class ApiService {
         job_description: jobDescription,
         recipient,
         channel,
+        provider,
       }),
     });
 

@@ -55,7 +55,11 @@ async def analyze_resume(request: ResumeTailorRequest):
     Analyze how well resume matches job description
     """
     try:
-        analysis = analyze_resume_job_match(request.resume_content, request.job_description)
+        analysis = analyze_resume_job_match(
+            request.resume_content,
+            request.job_description,
+            request.provider,
+        )
         return {
             "success": True,
             "analysis": analysis

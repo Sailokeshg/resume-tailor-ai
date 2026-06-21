@@ -1,43 +1,55 @@
 from fastapi import APIRouter, HTTPException, Response
 from app.schemas.tailor import TailorRequest, TailorResponse, OutreachRequest, OutreachResponse
-from app.services.ai_service import tailor_resume, generate_outreach
+from app.services.ai_service import tailor_resume, generate_outreach, check_visa_sponsorship, analyze_job_and_resume
 from app.utils.latex_utils import compile_latex_to_pdf, LatexCompilationError
+import logging
+import re
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
+
+
+def _safe_error_detail(exc: Exception) -> str:
+    detail = str(exc) or exc.__class__.__name__
+    return re.sub(r"sk-[A-Za-z0-9_-]+", "sk-***", detail)
 
 
 @router.post("/", response_model=TailorResponse)
 def tailor_resume_endpoint(request: TailorRequest):
-    # Check visa sponsorship first
-    from app.services.ai_service import check_visa_sponsorship
-    sponsorship = check_visa_sponsorship(request.job_description)
+    # --- Step 1: Visa sponsorship check (heuristic first, LLM only if needed) ---
+    sponsorship = check_visa_sponsorship(request.job_description, request.provider)
     if sponsorship.get("sponsorship_denied"):
         raise HTTPException(
             status_code=400,
             detail=f"Visa Sponsorship Denied: {sponsorship.get('reason')}"
         )
 
+    # --- Step 2: Single consolidated analysis call (keywords + company + match) ---
     try:
-        tailored = tailor_resume(request.resume, request.job_description, request.model)
-
-        # Extract company name
-        from app.services.ai_service import extract_company_name_with_ai, analyze_resume_job_match
-        company_name = extract_company_name_with_ai(request.job_description)
-
-        # Generate suggestions (reuse analyze logic)
-        analysis = analyze_resume_job_match(
-            request.resume, request.job_description)
-        suggestions = analysis.get(
-            "suggested_improvements", []) if isinstance(analysis, dict) else []
-
-        return TailorResponse(
-            tailored_resume=tailored, 
-            suggestions=suggestions, 
-            company_name=company_name
-        )
+        analysis = analyze_job_and_resume(request.resume, request.job_description, request.provider)
     except Exception:
-        raise HTTPException(status_code=500, detail="Failed to tailor resume.")
+        analysis = {"company_name": "", "keywords": [], "suggested_improvements": []}
 
+    # --- Step 3: Tailor resume (reuses pre-extracted keywords - no extra LLM call) ---
+    try:
+        tailored = tailor_resume(
+            request.resume,
+            request.job_description,
+            request.model,
+            request.provider,
+            job_keywords=analysis.get("keywords") or None,
+        )
+        return TailorResponse(
+            tailored_resume=tailored,
+            suggestions=analysis.get("suggested_improvements", []),
+            company_name=analysis.get("company_name", ""),
+        )
+    except Exception as exc:
+        logger.exception("Failed to tailor resume with provider=%s model=%s", request.provider, request.model)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to tailor resume with {request.provider}: {_safe_error_detail(exc)}",
+        )
 
 @router.post("/compile", response_class=Response)
 def compile_latex_endpoint(request: TailorRequest):
@@ -66,7 +78,8 @@ def generate_outreach_endpoint(request: OutreachRequest):
             resume=request.resume,
             job_description=request.job_description,
             recipient=request.recipient,
-            channel=request.channel
+            channel=request.channel,
+            provider=request.provider,
         )
         return OutreachResponse(
             subject=outreach_data.get("subject", ""),
@@ -74,4 +87,3 @@ def generate_outreach_endpoint(request: OutreachRequest):
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to generate outreach: {str(e)}")
-

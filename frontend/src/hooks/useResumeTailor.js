@@ -12,11 +12,11 @@ export default function useResumeTailor() {
   const [outreachLoading, setOutreachLoading] = useState(false);
   const [outreachError, setOutreachError] = useState("");
 
-  const generateOutreach = async (resume, jobDesc, recipient, channel) => {
+  const generateOutreach = async (resume, jobDesc, recipient, channel, provider) => {
     setOutreachLoading(true);
     setOutreachError("");
     try {
-      const res = await api.generateOutreach(resume, jobDesc, recipient, channel);
+      const res = await api.generateOutreach(resume, jobDesc, recipient, channel, provider);
       setOutreachMessage(res);
     } catch (err) {
       setOutreachError(err.message || "Failed to generate outreach message.");
@@ -25,7 +25,7 @@ export default function useResumeTailor() {
     }
   };
 
-  const tailorResume = async (resume, jobDesc, model) => {
+  const tailorResume = async (resume, jobDesc, model, provider) => {
     setLoading(true);
     setError("");
     setOutput("");
@@ -36,7 +36,7 @@ export default function useResumeTailor() {
     setOutreachError("");
 
     try {
-      const res = await api.tailorResume(resume, jobDesc, model);
+      const res = await api.tailorResume(resume, jobDesc, model, provider);
       const raw = res.tailored_resume || "";
 
       const removeThinkBlocks = (text) => {
@@ -79,7 +79,7 @@ export default function useResumeTailor() {
       setSuggestions(res.suggestions || []);
       setCompanyName(res.company_name || "");
     } catch (err) {
-      setError("Failed to tailor resume.");
+      setError(err.message || "Failed to tailor resume.");
     } finally {
       setLoading(false);
     }

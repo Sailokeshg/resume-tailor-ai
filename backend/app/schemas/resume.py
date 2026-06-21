@@ -15,6 +15,7 @@ class ResumeTailorRequest(BaseModel):
     resume_content: str
     job_description: str
     target_sections: Optional[List[str]] = None
+    provider: Optional[str] = "openrouter"
 
 class ResumeTailorResponse(BaseModel):
     success: bool

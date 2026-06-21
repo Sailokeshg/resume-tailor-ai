@@ -6,6 +6,7 @@ class TailorRequest(BaseModel):
     resume: str
     job_description: Optional[str] = ""
     model: Optional[str] = "DEEPSEEK_R1_0528"
+    provider: Optional[str] = "openrouter"
 
 
 class TailorResponse(BaseModel):
@@ -19,9 +20,9 @@ class OutreachRequest(BaseModel):
     job_description: str
     recipient: str  # recruiter or ceo
     channel: str  # email or inmail
+    provider: Optional[str] = "openrouter"
 
 
 class OutreachResponse(BaseModel):
     subject: str
     body: str
-
