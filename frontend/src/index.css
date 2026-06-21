@@ -120,6 +120,43 @@ button:focus, input:focus, textarea:focus, [role="button"]:focus { outline: none
 .spinner { width: 18px; height: 18px; border-radius: 9999px; border: 3px solid rgba(255,255,255,0.12); border-top-color: var(--primary); animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* Outreach Section Styles */
+.outreach-panel {
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
+  padding: 12px;
+  background: var(--bg-elev);
+}
+.outreach-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.outreach-select {
+  background: #0c142b;
+  color: var(--text);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  padding: 4px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  outline: none;
+}
+.outreach-select:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px rgba(106,164,255,0.18);
+}
+.subject-line {
+  background: #0c142b;
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+}
+
 /* Responsive */
 @media (max-width: 1200px) {
   .app-main { grid-template-columns: 300px 1fr 1fr; }

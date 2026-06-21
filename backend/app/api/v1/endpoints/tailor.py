@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Response
-from app.schemas.tailor import TailorRequest, TailorResponse
-from app.services.ai_service import tailor_resume
+from app.schemas.tailor import TailorRequest, TailorResponse, OutreachRequest, OutreachResponse
+from app.services.ai_service import tailor_resume, generate_outreach
 from app.utils.latex_utils import compile_latex_to_pdf, LatexCompilationError
 
 router = APIRouter()
@@ -8,6 +8,15 @@ router = APIRouter()
 
 @router.post("/", response_model=TailorResponse)
 def tailor_resume_endpoint(request: TailorRequest):
+    # Check visa sponsorship first
+    from app.services.ai_service import check_visa_sponsorship
+    sponsorship = check_visa_sponsorship(request.job_description)
+    if sponsorship.get("sponsorship_denied"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Visa Sponsorship Denied: {sponsorship.get('reason')}"
+        )
+
     try:
         tailored = tailor_resume(request.resume, request.job_description, request.model)
 
@@ -45,3 +54,24 @@ def compile_latex_endpoint(request: TailorRequest):
         raise HTTPException(status_code=422, detail=str(e))
     except Exception:
         raise HTTPException(status_code=500, detail="Failed to compile LaTeX.")
+
+
+@router.post("/outreach", response_model=OutreachResponse)
+def generate_outreach_endpoint(request: OutreachRequest):
+    """
+    Generate email or LinkedIn outreach message based on resume and job description.
+    """
+    try:
+        outreach_data = generate_outreach(
+            resume=request.resume,
+            job_description=request.job_description,
+            recipient=request.recipient,
+            channel=request.channel
+        )
+        return OutreachResponse(
+            subject=outreach_data.get("subject", ""),
+            body=outreach_data.get("body", "")
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate outreach: {str(e)}")
+

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import FileUpload from "../components/FileUpload.jsx";
 import TailoredOutput from "../components/TailoredOutput.jsx";
 import LoadingSpinner from "../components/LoadingSpinner.jsx";
@@ -10,9 +10,25 @@ const ResumeTailorPage = () => {
   const [resumeContent, setResumeContent] = useState("");
   const [jobDesc, setJobDesc] = useState("");
   const [model, setModel] = useState("GEMMA_4_31B_IT");
-  const { output, suggestions, improvementsSummary, companyName, loading, error, tailorResume } =
-    useResumeTailor();
+  const {
+    output,
+    suggestions,
+    companyName,
+    loading,
+    error,
+    tailorResume,
+    outreachMessage,
+    setOutreachMessage,
+    outreachLoading,
+    outreachError,
+    generateOutreach,
+  } = useResumeTailor();
   const [showInputs, setShowInputs] = useState(true);
+
+  const [outreachRecipient, setOutreachRecipient] = useState("recruiter");
+  const [outreachChannel, setOutreachChannel] = useState("email");
+  const [copied, setCopied] = useState(false);
+
 
   const handleFileSelect = (file) => {
     setSelectedFile(file);
@@ -29,6 +45,16 @@ const ResumeTailorPage = () => {
       return;
     }
     tailorResume(resumeContent, jobDesc, model);
+  };
+
+  const handleCopy = () => {
+    if (!outreachMessage) return;
+    const textToCopy = outreachMessage.subject
+      ? `Subject: ${outreachMessage.subject}\n\n${outreachMessage.body}`
+      : outreachMessage.body;
+    navigator.clipboard.writeText(textToCopy);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
   return (
@@ -102,10 +128,87 @@ const ResumeTailorPage = () => {
                 <div className="toast toast-error mt-4">{error}</div>
               )}
 
-              {improvementsSummary && (
-                <div className="summary mt-6">
-                  <div className="summary-header">Improvements Summary</div>
-                  <div className="summary-body whitespace-pre-wrap">{improvementsSummary}</div>
+              {/* Outreach Generation Panel */}
+              {output && (
+                <div className="outreach-panel mt-6">
+                  <div className="outreach-header">
+                    <span className="label">Outreach Message</span>
+                    <div className="flex gap-2">
+                      <select
+                        value={outreachRecipient}
+                        onChange={(e) => setOutreachRecipient(e.target.value)}
+                        className="outreach-select"
+                        disabled={outreachLoading}
+                      >
+                        <option value="recruiter">Recruiter</option>
+                        <option value="ceo">CEO</option>
+                      </select>
+                      <select
+                        value={outreachChannel}
+                        onChange={(e) => setOutreachChannel(e.target.value)}
+                        className="outreach-select"
+                        disabled={outreachLoading}
+                      >
+                        <option value="email">Email</option>
+                        <option value="inmail">InMail</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="outreach-body mt-3">
+                    {outreachLoading ? (
+                      <div className="flex justify-center items-center py-6 gap-2 text-muted text-sm">
+                        <LoadingSpinner /> Generating message…
+                      </div>
+                    ) : outreachError ? (
+                      <div className="toast toast-error mt-2">{outreachError}</div>
+                    ) : outreachMessage ? (
+                      <div className="outreach-content space-y-3">
+                        {outreachMessage.subject && (
+                          <div className="subject-line">
+                            <span className="text-muted font-bold text-xs uppercase mr-2">Subject:</span>
+                            <span className="text-sm">{outreachMessage.subject}</span>
+                          </div>
+                        )}
+                        <textarea
+                          className="textarea text-sm font-sans"
+                          rows={10}
+                          value={outreachMessage.body}
+                          onChange={(e) =>
+                            setOutreachMessage({ ...outreachMessage, body: e.target.value })
+                          }
+                          placeholder="Generated message..."
+                        />
+                        <div className="flex justify-between items-center mt-2">
+                          <button
+                            onClick={() => generateOutreach(output, jobDesc, outreachRecipient, outreachChannel)}
+                            className="btn btn-secondary text-xs"
+                            style={{ padding: "6px 12px" }}
+                            disabled={outreachLoading}
+                          >
+                            Regenerate
+                          </button>
+                          <button
+                            onClick={handleCopy}
+                            className="btn btn-secondary text-xs"
+                            style={{ padding: "6px 12px" }}
+                          >
+                            {copied ? "Copied!" : "Copy Message"}
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex justify-center py-2">
+                        <button
+                          onClick={() => generateOutreach(output, jobDesc, outreachRecipient, outreachChannel)}
+                          className="btn btn-primary w-full text-xs"
+                          disabled={outreachLoading}
+                        >
+                          Generate Outreach Message
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
@@ -124,3 +227,4 @@ const ResumeTailorPage = () => {
 };
 
 export default ResumeTailorPage;
+

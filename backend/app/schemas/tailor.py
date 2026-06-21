@@ -12,3 +12,16 @@ class TailorResponse(BaseModel):
     tailored_resume: str
     suggestions: list[str] = []
     company_name: Optional[str] = ""
+
+
+class OutreachRequest(BaseModel):
+    resume: str
+    job_description: str
+    recipient: str  # recruiter or ceo
+    channel: str  # email or inmail
+
+
+class OutreachResponse(BaseModel):
+    subject: str
+    body: str
+

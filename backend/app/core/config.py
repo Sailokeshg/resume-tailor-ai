@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     default_tailor_model: str = "google/gemma-4-31b-it:free"
     keyword_extraction_model: str = "deepseek/deepseek-chat-v3-0324:free"
     match_analysis_model: str = "deepseek/deepseek-chat-v3-0324:free"
+    outreach_model: str = "google/gemma-4-31b-it:free"
 
     # Database Configuration
     chroma_db_path: str = "./chroma_db"

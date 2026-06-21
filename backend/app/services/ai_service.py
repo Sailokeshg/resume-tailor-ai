@@ -328,3 +328,140 @@ def extract_company_name_with_ai(job_description: str) -> str:
     except Exception as e:
         logger.error(f"Error extracting company name: {str(e)}")
         return ""
+
+
+def generate_outreach(resume: str, job_description: str, recipient: str, channel: str) -> dict:
+    """
+    Generate outreach message to a recruiter or CEO based on job description and resume.
+    """
+    try:
+        recip_label = "Recruiter" if recipient.lower() == "recruiter" else "CEO"
+        chan_label = "Email" if channel.lower() == "email" else "LinkedIn InMail"
+
+        model_mapping = {
+            "GEMMA_4_31B_IT": "google/gemma-4-31b-it:free",
+            "DEEPSEEK_V3_0324": "deepseek/deepseek-chat-v3-0324:free",
+            "QWEN3_235B_A22B": "qwen/qwen3-235b-a22b:free",
+            "Z.AI_GLM_4_5_AIR": "z-ai/glm-4.5-air:free",
+            "MOONSHOTAI_KIMI_VL_A3B_THINKING": "moonshotai/kimi-vl-a3b-thinking:free",
+        }
+
+        provider_model = resolve_provider_model(settings.outreach_model, model_mapping)
+
+        system_prompt = (
+            "You are an expert career coach and professional copywriter.\n"
+            "Your task is to draft a personalized, highly effective outreach message (Email or LinkedIn InMail) "
+            "to a Recruiter or CEO, demonstrating the candidate's fit based on their resume and interest in the job description.\n\n"
+            "CRITICAL GUIDELINES:\n"
+            "1. TONE: Write in a natural, warm, human, and professional tone. Avoid stiff, robotic, or overly formal language. "
+            "Do NOT use typical AI clichés (e.g., 'I hope this email finds you well', 'Dear [Name]', 'I am thrilled to apply', 'As a testament to', 'plethora of skills', 'delighted to connect', etc.).\n"
+            "2. LENGTH: Keep it extremely brief, concise, and scannable. Busy recruiters and CEOs only scan messages. "
+            "If channel is 'LinkedIn InMail', it must be under 150 words. If 'Email', it must be under 200 words.\n"
+            "3. VALUE PITCH: Focus on 1 or 2 specific highlights from the tailored resume that directly match the core requirements of the job description. Do not list everything; focus on the highest impact alignment.\n"
+            "4. CALL TO ACTION (CTA): Keep the CTA low-friction and direct (e.g., asking if they have 5 minutes for a quick chat next week, or if you can send over a calendar link).\n"
+            "5. OUTPUT FORMAT: Return ONLY a valid JSON object with the following keys:\n"
+            "   - 'subject': A catchy, simple, non-clickbait subject line (only if channel is Email; return empty string if LinkedIn InMail).\n"
+            "   - 'body': The message body, using placeholders like '[Name]' for the recipient's name or '[Company Name]' for the company name where appropriate."
+        )
+
+        user_prompt = f"""
+Target Recipient: {recip_label}
+Target Channel: {chan_label}
+
+Job Description:
+{job_description}
+
+Tailored Resume (LaTeX/Text):
+{resume}
+
+Please generate the outreach message in the requested JSON format. Output ONLY the raw JSON object. Do not include markdown code fences or any other text.
+"""
+
+        completion = client.chat.completions.create(
+            extra_headers={
+                "X-Title": "Resume Tailor AI",
+            },
+            model=provider_model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ]
+        )
+        content = completion.choices[0].message.content.strip()
+
+        # Clean any potential code fences
+        if content.startswith("```"):
+            lines = content.splitlines()
+            if lines[0].startswith("```"):
+                lines = lines[1:]
+            if lines and lines[-1].strip() == "```":
+                lines = lines[:-1]
+            content = "\n".join(lines).strip()
+
+        data = json.loads(content)
+        return {
+            "subject": data.get("subject", ""),
+            "body": data.get("body", "")
+        }
+    except Exception as e:
+        logger.error(f"Error generating outreach message: {str(e)}")
+        # Simple fallback message
+        return {
+            "subject": "Quick question regarding the opening" if channel.lower() == "email" else "",
+            "body": f"Hi [Name],\n\nI noticed the opening at [Company Name] and wanted to reach out. Based on my background, I believe I could be a great fit for your team. Let me know if you have a few minutes to connect.\n\nBest,\n[Your Name]"
+        }
+
+
+def check_visa_sponsorship(job_description: str) -> dict:
+    """
+    Analyze job description to determine if company explicitly denies visa sponsorship.
+    """
+    if not job_description or not job_description.strip():
+        return {"sponsorship_denied": False, "reason": ""}
+    try:
+        prompt = f"""
+Analyze the job description below and determine if the company explicitly states they will NOT provide visa sponsorship (e.g., require existing unrestricted work authorization, state 'no visa sponsorship', require US citizenship or Green Card, state 'will not sponsor H-1B', require no sponsorship to work, etc.).
+
+Job Description:
+{job_description}
+
+Rules for determination:
+1. sponsorship_denied should be true ONLY if there is an explicit statement denying visa sponsorship or requiring citizenship/unrestricted authorization.
+2. If there is no mention of visa sponsorship, or if it says they sponsor, sponsorship_denied should be false.
+
+Output ONLY a JSON object with:
+- "sponsorship_denied": boolean (true/false)
+- "reason": string (brief explanation or quote from the job description if denied, empty if not denied)
+
+Do not include any markdown fences or other text.
+"""
+        completion = client.chat.completions.create(
+            extra_headers={
+                "X-Title": "Resume Tailor AI",
+            },
+            model=settings.match_analysis_model,
+            messages=[
+                {"role": "system", "content": "You are a professional recruiting compliance assistant. You only output valid JSON."},
+                {"role": "user", "content": prompt}
+            ]
+        )
+        content = completion.choices[0].message.content.strip()
+        # clean code fences
+        if content.startswith("```"):
+            lines = content.splitlines()
+            if lines[0].startswith("```"):
+                lines = lines[1:]
+            if lines and lines[-1].strip() == "```":
+                lines = lines[:-1]
+            content = "\n".join(lines).strip()
+
+        data = json.loads(content)
+        return {
+            "sponsorship_denied": bool(data.get("sponsorship_denied", False)),
+            "reason": str(data.get("reason", ""))
+        }
+    except Exception as e:
+        logger.error(f"Error checking visa sponsorship: {str(e)}")
+        return {"sponsorship_denied": False, "reason": ""}
+
+

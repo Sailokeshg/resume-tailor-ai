@@ -68,6 +68,28 @@ class ApiService {
     return blob;
   }
 
+  async generateOutreach(resumeContent, jobDescription, recipient, channel) {
+    const response = await fetch(`${this.baseURL}/api/v1/tailor/outreach`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        resume: resumeContent,
+        job_description: jobDescription,
+        recipient,
+        channel,
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to generate outreach');
+    }
+
+    return response.json();
+  }
+
   async analyzeMatch(resumeContent, jobDescription) {
     const response = await fetch(`${this.baseURL}/api/v1/resume/analyze`, {
       method: 'POST',

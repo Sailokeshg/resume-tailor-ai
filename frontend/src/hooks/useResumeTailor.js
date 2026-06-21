@@ -8,6 +8,22 @@ export default function useResumeTailor() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [companyName, setCompanyName] = useState("");
+  const [outreachMessage, setOutreachMessage] = useState(null);
+  const [outreachLoading, setOutreachLoading] = useState(false);
+  const [outreachError, setOutreachError] = useState("");
+
+  const generateOutreach = async (resume, jobDesc, recipient, channel) => {
+    setOutreachLoading(true);
+    setOutreachError("");
+    try {
+      const res = await api.generateOutreach(resume, jobDesc, recipient, channel);
+      setOutreachMessage(res);
+    } catch (err) {
+      setOutreachError(err.message || "Failed to generate outreach message.");
+    } finally {
+      setOutreachLoading(false);
+    }
+  };
 
   const tailorResume = async (resume, jobDesc, model) => {
     setLoading(true);
@@ -16,6 +32,8 @@ export default function useResumeTailor() {
     setSuggestions([]);
     setImprovementsSummary("");
     setCompanyName("");
+    setOutreachMessage(null);
+    setOutreachError("");
 
     try {
       const res = await api.tailorResume(resume, jobDesc, model);
@@ -67,5 +85,18 @@ export default function useResumeTailor() {
     }
   };
 
-  return { output, suggestions, improvementsSummary, companyName, loading, error, tailorResume };
+  return {
+    output,
+    suggestions,
+    improvementsSummary,
+    companyName,
+    loading,
+    error,
+    tailorResume,
+    outreachMessage,
+    setOutreachMessage,
+    outreachLoading,
+    outreachError,
+    generateOutreach,
+  };
 }
