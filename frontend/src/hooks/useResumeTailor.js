@@ -11,6 +11,7 @@ export default function useResumeTailor() {
   const [outreachMessage, setOutreachMessage] = useState(null);
   const [outreachLoading, setOutreachLoading] = useState(false);
   const [outreachError, setOutreachError] = useState("");
+  const [progressSteps, setProgressSteps] = useState([]);
 
   const generateOutreach = async (resume, jobDesc, recipient, channel, provider) => {
     setOutreachLoading(true);
@@ -34,9 +35,32 @@ export default function useResumeTailor() {
     setCompanyName("");
     setOutreachMessage(null);
     setOutreachError("");
+    setProgressSteps([]);
 
     try {
-      const res = await api.tailorResume(resume, jobDesc, model, provider);
+      const res = await api.tailorResumeSSE(
+        resume,
+        jobDesc,
+        model,
+        provider,
+        (eventType, parsedData) => {
+          if (eventType === "progress") {
+            setProgressSteps((prev) => {
+              const existingIndex = prev.findIndex((s) => s.step === parsedData.step);
+              if (existingIndex >= 0) {
+                const next = [...prev];
+                next[existingIndex] = { ...next[existingIndex], ...parsedData };
+                return next;
+              } else {
+                return [...prev, parsedData];
+              }
+            });
+          } else if (eventType === "chunk") {
+            // Append incoming tokens to output for real-time typing effect
+            setOutput((prev) => prev + (parsedData.text || ""));
+          }
+        }
+      );
       const raw = res.tailored_resume || "";
 
       const removeThinkBlocks = (text) => {
@@ -82,6 +106,7 @@ export default function useResumeTailor() {
       setError(err.message || "Failed to tailor resume.");
     } finally {
       setLoading(false);
+      setProgressSteps([]);
     }
   };
 
@@ -92,6 +117,7 @@ export default function useResumeTailor() {
     companyName,
     loading,
     error,
+    progressSteps,
     tailorResume,
     outreachMessage,
     setOutreachMessage,

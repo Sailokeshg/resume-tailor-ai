@@ -10,19 +10,20 @@ const MODEL_STORAGE_KEY = "resume-tailor-ai-model";
 
 const providerOptions = [
   { value: "openrouter", label: "OpenRouter" },
-  { value: "requesty", label: "Requesty" },
+  { value: "hcnsec", label: "HCNsec" },
 ];
 
 const modelOptionsByProvider = {
   openrouter: [
-    { value: "GEMMA_4_31B_IT", label: "Gemma 4 31B IT" },
-    { value: "DEEPSEEK_V3_0324", label: "DeepSeek: V3 0324" },
-    { value: "QWEN3_235B_A22B", label: "Qwen3 235B A22B" },
-    { value: "Z.AI_GLM_4_5_AIR", label: "Z.AI: GLM 4.5 Air" },
-    { value: "MOONSHOTAI_KIMI_VL_A3B_THINKING", label: "Moonshot AI: Kimi VL A3B Thinking" },
+    { value: "DeepSeek-V4-Pro", label: "DeepSeek V4 Pro" },
+    { value: "glm-5.2", label: "GLM 5.2" },
+    { value: "DeepSeek-V4-Flash", label: "DeepSeek V4 Flash" },
   ],
-  requesty: [
-    { value: "GEMMA_4_31B_IT", label: "Gemma 4 31B IT" },
+  hcnsec: [
+    { value: "auto", label: "Auto" },
+    { value: "DeepSeek-V4-Pro", label: "DeepSeek V4 Pro" },
+    { value: "glm-5.2", label: "GLM 5.2" },
+    { value: "DeepSeek-V4-Flash", label: "DeepSeek V4 Flash" },
   ],
 };
 
@@ -38,14 +39,19 @@ const ResumeTailorPage = () => {
   const [selectedFile, setSelectedFile] = useState(null);
   const [resumeContent, setResumeContent] = useState("");
   const [jobDesc, setJobDesc] = useState("");
-  const [provider, setProvider] = useState(() => getStoredValue(PROVIDER_STORAGE_KEY, "openrouter"));
-  const [model, setModel] = useState(() => getStoredValue(MODEL_STORAGE_KEY, "GEMMA_4_31B_IT"));
+  const [provider, setProvider] = useState(() =>
+    getStoredValue(PROVIDER_STORAGE_KEY, "openrouter"),
+  );
+  const [model, setModel] = useState(() =>
+    getStoredValue(MODEL_STORAGE_KEY, "DeepSeek-V4-Pro"),
+  );
   const {
     output,
     suggestions,
     companyName,
     loading,
     error,
+    progressSteps,
     tailorResume,
     outreachMessage,
     setOutreachMessage,
@@ -59,7 +65,8 @@ const ResumeTailorPage = () => {
   const [outreachChannel, setOutreachChannel] = useState("email");
   const [copied, setCopied] = useState(false);
 
-  const modelOptions = modelOptionsByProvider[provider] || modelOptionsByProvider.openrouter;
+  const modelOptions =
+    modelOptionsByProvider[provider] || modelOptionsByProvider.openrouter;
 
   useEffect(() => {
     if (!providerOptions.some((option) => option.value === provider)) {
@@ -130,7 +137,9 @@ const ResumeTailorPage = () => {
             disabled={loading}
           >
             {providerOptions.map((option) => (
-              <option key={option.value} value={option.value}>{option.label}</option>
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
             ))}
           </select>
           <select
@@ -140,7 +149,9 @@ const ResumeTailorPage = () => {
             disabled={loading}
           >
             {modelOptions.map((option) => (
-              <option key={option.value} value={option.value}>{option.label}</option>
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
             ))}
           </select>
           <button
@@ -156,7 +167,9 @@ const ResumeTailorPage = () => {
             className="btn btn-primary"
           >
             {loading ? (
-              <span className="flex items-center gap-2"><LoadingSpinner /> Tailoring…</span>
+              <span className="flex items-center gap-2">
+                <LoadingSpinner /> Tailoring…
+              </span>
             ) : (
               "Tailor Resume"
             )}
@@ -185,9 +198,7 @@ const ResumeTailorPage = () => {
                 />
               </div>
 
-              {error && (
-                <div className="toast toast-error mt-4">{error}</div>
-              )}
+              {error && <div className="toast toast-error mt-4">{error}</div>}
 
               {/* Outreach Generation Panel */}
               {output && (
@@ -222,13 +233,19 @@ const ResumeTailorPage = () => {
                         <LoadingSpinner /> Generating message…
                       </div>
                     ) : outreachError ? (
-                      <div className="toast toast-error mt-2">{outreachError}</div>
+                      <div className="toast toast-error mt-2">
+                        {outreachError}
+                      </div>
                     ) : outreachMessage ? (
                       <div className="outreach-content space-y-3">
                         {outreachMessage.subject && (
                           <div className="subject-line">
-                            <span className="text-muted font-bold text-xs uppercase mr-2">Subject:</span>
-                            <span className="text-sm">{outreachMessage.subject}</span>
+                            <span className="text-muted font-bold text-xs uppercase mr-2">
+                              Subject:
+                            </span>
+                            <span className="text-sm">
+                              {outreachMessage.subject}
+                            </span>
                           </div>
                         )}
                         <textarea
@@ -236,13 +253,24 @@ const ResumeTailorPage = () => {
                           rows={10}
                           value={outreachMessage.body}
                           onChange={(e) =>
-                            setOutreachMessage({ ...outreachMessage, body: e.target.value })
+                            setOutreachMessage({
+                              ...outreachMessage,
+                              body: e.target.value,
+                            })
                           }
                           placeholder="Generated message..."
                         />
                         <div className="flex justify-between items-center mt-2">
                           <button
-                            onClick={() => generateOutreach(output, jobDesc, outreachRecipient, outreachChannel, provider)}
+                            onClick={() =>
+                              generateOutreach(
+                                output,
+                                jobDesc,
+                                outreachRecipient,
+                                outreachChannel,
+                                provider,
+                              )
+                            }
                             className="btn btn-secondary text-xs"
                             style={{ padding: "6px 12px" }}
                             disabled={outreachLoading}
@@ -261,7 +289,15 @@ const ResumeTailorPage = () => {
                     ) : (
                       <div className="flex justify-center py-2">
                         <button
-                          onClick={() => generateOutreach(output, jobDesc, outreachRecipient, outreachChannel, provider)}
+                          onClick={() =>
+                            generateOutreach(
+                              output,
+                              jobDesc,
+                              outreachRecipient,
+                              outreachChannel,
+                              provider,
+                            )
+                          }
                           className="btn btn-primary w-full text-xs"
                           disabled={outreachLoading}
                         >
@@ -277,11 +313,18 @@ const ResumeTailorPage = () => {
         )}
 
         {/* Editor + Preview Panels */}
-        <TailoredOutput output={output} resumeContent={resumeContent} loading={loading} companyName={companyName} />
+        <TailoredOutput
+          output={output}
+          resumeContent={resumeContent}
+          loading={loading}
+          companyName={companyName}
+          progressSteps={progressSteps}
+        />
       </main>
 
       <footer className="app-footer">
-        &copy; {new Date().getFullYear()} <span className="font-semibold">Resume Tailor AI</span>
+        &copy; {new Date().getFullYear()}{" "}
+        <span className="font-semibold">Resume Tailor AI</span>
       </footer>
     </div>
   );

@@ -5,7 +5,7 @@ from typing import Optional
 class TailorRequest(BaseModel):
     resume: str
     job_description: Optional[str] = ""
-    model: Optional[str] = "DEEPSEEK_R1_0528"
+    model: Optional[str] = "DeepSeek-V4-Pro"
     provider: Optional[str] = "openrouter"
 
 

@@ -13,13 +13,15 @@ class Settings(BaseSettings):
     requesty_api_key: str = ""
     requesty_base_url: str = "https://router.requesty.ai/v1"
 
+    # HCNsec Configuration
+    hcnsec_api_key: str = ""
+    hcnsec_base_url: str = "https://api.hcnsec.cn/v1"
+
     # Model Configurations
-    default_tailor_model: str = "google/gemma-4-31b-it:free"
-    keyword_extraction_model: str = "deepseek/deepseek-chat-v3-0324:free"
-    match_analysis_model: str = "deepseek/deepseek-chat-v3-0324:free"
-    outreach_model: str = "google/gemma-4-31b-it:free"
-    requesty_tailor_model: str = "google/gemma-4-31b-it"
-    requesty_auxiliary_model: str = "nvidia/nemotron-3-ultra-550b-a55b"
+    default_tailor_model: str = "DeepSeek-V4-Pro"
+    keyword_extraction_model: str = "DeepSeek-V4-Pro"
+    match_analysis_model: str = "DeepSeek-V4-Pro"
+    outreach_model: str = "DeepSeek-V4-Pro"
 
     # Database Configuration
     chroma_db_path: str = "./chroma_db"

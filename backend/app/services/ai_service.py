@@ -1,8 +1,8 @@
 import json
-from openai import OpenAI
+from openai import OpenAI, AsyncOpenAI
 from app.core.config import settings
 from app.services.rag_service import rag_service
-from typing import Dict
+from typing import Dict, AsyncGenerator, Any
 from app.services.latex_parser import parse_latex_resume
 import uuid
 import logging
@@ -11,48 +11,83 @@ import re
 logger = logging.getLogger(__name__)
 
 OPENROUTER_MODEL_MAPPING = {
-    "GEMMA_4_31B_IT": "google/gemma-4-31b-it:free",
-    "DEEPSEEK_V3_0324": "deepseek/deepseek-chat-v3-0324:free",
-    "QWEN3_235B_A22B": "qwen/qwen3-235b-a22b:free",
-    "Z.AI_GLM_4_5_AIR": "z-ai/glm-4.5-air:free",
-    "MOONSHOTAI_KIMI_VL_A3B_THINKING": "moonshotai/kimi-vl-a3b-thinking:free",
+    "DEEPSEEK_V4_PRO": "DeepSeek-V4-Pro",
+    "GLM_5_2": "glm-5.2",
+    "DEEPSEEK_V4_FLASH": "DeepSeek-V4-Flash",
 }
 
-REQUESTY_MODEL_MAPPING = {
-    "GEMMA_4_31B_IT": settings.requesty_tailor_model,
-    "NVIDIA_NEMOTRON_3_ULTRA_550B_A55B": settings.requesty_auxiliary_model,
+HCNSEC_MODEL_MAPPING = {
+    "DEEPSEEK_V4_PRO": "DeepSeek-V4-Pro",
+    "GLM_5_2": "glm-5.2",
+    "DEEPSEEK_V4_FLASH": "DeepSeek-V4-Flash",
+    "AUTO": "auto",
 }
 
 
 def normalize_provider(provider: str | None) -> str:
-    value = (provider or "openrouter").strip().lower()
-    if value in {"requesty", "requestly"}:
-        return "requesty"
-    return "openrouter"
+    provider = (provider or "openrouter").strip().lower()
+    if provider not in {"openrouter", "hcnsec"}:
+        raise ValueError(f"Unsupported provider: {provider}")
+    return provider
 
 
 def get_ai_client(provider: str | None) -> OpenAI:
-    normalized = normalize_provider(provider)
-    if normalized == "requesty":
-        if not settings.requesty_api_key:
-            raise ValueError("REQUESTY_API_KEY is required when provider is requesty.")
+    provider = normalize_provider(provider)
+    if provider == "hcnsec":
         return OpenAI(
-            base_url=settings.requesty_base_url,
-            api_key=settings.requesty_api_key,
+            base_url=settings.hcnsec_base_url,
+            api_key=settings.hcnsec_api_key,
         )
-
     return OpenAI(
         base_url=settings.openai_base_url,
         api_key=settings.openai_api_key,
     )
 
 
-def create_chat_completion(provider: str | None, model: str, messages: list[dict], extra_headers: dict | None = None):
-    return get_ai_client(provider).chat.completions.create(
-        extra_headers=extra_headers or {"X-Title": "Resume Tailor AI"},
-        model=model,
-        messages=messages,
+def get_async_ai_client(provider: str | None) -> AsyncOpenAI:
+    provider = normalize_provider(provider)
+    if provider == "hcnsec":
+        return AsyncOpenAI(
+            base_url=settings.hcnsec_base_url,
+            api_key=settings.hcnsec_api_key,
+        )
+    return AsyncOpenAI(
+        base_url=settings.openai_base_url,
+        api_key=settings.openai_api_key,
     )
+
+
+def create_chat_completion(provider: str | None, model: str, messages: list[dict], extra_headers: dict | None = None):
+    client = get_ai_client(provider)
+    kwargs = {
+        "model": model,
+        "messages": messages,
+    }
+    if normalize_provider(provider) == "openrouter":
+        kwargs["extra_headers"] = extra_headers or {
+            "X-Title": "Resume Tailor AI"}
+    logger.info(f"Starting API call to {provider} with model {model} (sync)")
+    response = client.chat.completions.create(**kwargs)
+    logger.info(f"Finished API call to {provider} with model {model} (sync)")
+    return response
+
+
+async def create_chat_completion_stream(provider: str | None, model: str, messages: list[dict], extra_headers: dict | None = None) -> AsyncGenerator[str, None]:
+    client = get_async_ai_client(provider)
+    kwargs = {
+        "model": model,
+        "messages": messages,
+    }
+    if normalize_provider(provider) == "openrouter":
+        kwargs["extra_headers"] = extra_headers or {
+            "X-Title": "Resume Tailor AI"}
+    
+    logger.info(f"Starting API stream to {provider} with model {model}")
+    stream = await client.chat.completions.create(**kwargs, stream=True)
+    async for chunk in stream:
+        if chunk.choices and chunk.choices[0].delta.content is not None:
+            yield chunk.choices[0].delta.content
+    logger.info(f"Finished API stream to {provider} with model {model}")
 
 
 def sanitize_model_output(text: str) -> str:
@@ -72,6 +107,21 @@ def sanitize_model_output(text: str) -> str:
         return text
 
 
+def _get_content(completion) -> str:
+    if not completion.choices:
+        raise ValueError("API returned no choices in response.")
+    message = completion.choices[0].message
+    content = message.content
+    refusal = getattr(message, "refusal", None)
+    if refusal:
+        logger.warning(f"Model refused request: {refusal}")
+    if content is None:
+        if refusal:
+            raise ValueError(f"Model refused request: {refusal}")
+        raise ValueError("Model returned empty content (None).")
+    return content.strip()
+
+
 def resolve_provider_model(selected: str, mapping: Dict[str, str], default_model: str) -> str:
     """Resolve a frontend-provided model to a provider id.
     - If `selected` is already a full provider id (contains a slash), return it
@@ -85,59 +135,44 @@ def resolve_provider_model(selected: str, mapping: Dict[str, str], default_model
     return mapping.get(selected, default_provider_model)
 
 
-def resolve_tailor_model(selected: str | None, provider: str | None) -> str:
-    normalized = normalize_provider(provider)
-    if normalized == "requesty":
-        return resolve_provider_model(
-            selected or "GEMMA_4_31B_IT",
-            REQUESTY_MODEL_MAPPING,
-            settings.requesty_tailor_model,
-        )
+def _provider_mapping(provider: str | None) -> Dict[str, str]:
+    provider = normalize_provider(provider)
+    return HCNSEC_MODEL_MAPPING if provider == "hcnsec" else OPENROUTER_MODEL_MAPPING
 
+
+def resolve_tailor_model(selected: str | None, provider: str | None) -> str:
     return resolve_provider_model(
         selected or "",
-        OPENROUTER_MODEL_MAPPING,
+        _provider_mapping(provider),
         settings.default_tailor_model,
     )
 
 
-def resolve_auxiliary_model(provider: str | None, openrouter_model: str) -> str:
-    if normalize_provider(provider) == "requesty":
-        return settings.requesty_auxiliary_model
-    return openrouter_model
+def resolve_auxiliary_model(provider: str | None, model: str) -> str:
+    # For hcnsec, always use 'auto' for auxiliary (non-tailor) calls
+    if normalize_provider(provider) == "hcnsec":
+        return "auto"
+    return resolve_provider_model(
+        model,
+        _provider_mapping(provider),
+        model,
+    )
 
 
 def tailor_resume(resume: str, job_description: str, model: str | None = None, provider: str | None = None, job_keywords: list | None = None) -> str:
     """
-    Tailor resume using RAG and AI.
+    Tailor resume using AI.
     Accepts optional pre-extracted job_keywords to skip an extra LLM call.
     """
     try:
-        # Generate unique IDs
-        resume_id = str(uuid.uuid4())
-        job_id = str(uuid.uuid4())
-
-        # Parse resume sections
-        sections = parse_latex_resume(resume)
-
-        # Store resume sections in vector DB
-        section_dicts = [section.dict() for section in sections]
-        rag_service.store_resume_sections(resume_id, section_dicts)
-
-        # Store job description
-        rag_service.store_job_description(job_id, job_description)
-
-        # Find relevant sections
-        relevant_sections = rag_service.find_relevant_sections(
-            job_description, resume_id)
-
         # Use pre-extracted keywords if provided, else fall back to LLM extraction
         if not job_keywords:
-            job_keywords = extract_job_keywords_with_ai(job_description, provider)
+            job_keywords = extract_job_keywords_with_ai(
+                job_description, provider)
 
-        # Create enhanced prompt with RAG context
+        # Create enhanced prompt
         prompt = create_tailoring_prompt(
-            resume, job_description, relevant_sections, job_keywords)
+            resume, job_description, job_keywords)
 
         provider_model = resolve_tailor_model(model, provider)
 
@@ -145,11 +180,24 @@ def tailor_resume(resume: str, job_description: str, model: str | None = None, p
             "You are an expert resume writer and LaTeX formatting specialist.\n"
             "Your objective is to tailor the candidate's LaTeX resume to align with a target job description.\n\n"
             "CRITICAL FORMATTING RULES:\n"
-            "1. Output ONLY valid, compile-ready LaTeX code representing the tailored resume.\n"
-            "2. Do NOT use markdown code fences (e.g. ```latex) or pre/post commentary within the LaTeX section.\n"
-            "3. Preserve all existing LaTeX packages, layouts, structure, and headers. Only modify contents inside the document.\n"
-            "4. Be extremely careful with special character escaping. Ensure %, &, $, _, #, {, } are correctly escaped unless they form valid LaTeX commands.\n"
-            "5. Immediately after the \\end{document} tag, write a detailed, structured plain-text/markdown summary of the improvements made. Format it nicely (e.g. list modified sections, added keywords, and explanation)."
+            "1. Output ONLY valid, compile-ready LaTeX code representing the tailored resume. DO NOT include any conversational filler.\n"
+            "2. YOU MUST OUTPUT THE ENTIRE LATEX DOCUMENT FROM START TO FINISH. Do NOT omit, truncate, or abbreviate the preamble, packages, or unchanged sections. Start exactly with \\documentclass and end exactly with \\end{document}.\n"
+            "3. Do NOT use markdown code fences (e.g. ```latex) or pre/post commentary within the LaTeX section.\n"
+            "4. Preserve all existing LaTeX packages, layouts, structure, and headers. Only modify contents inside the document.\n"
+            "5. Be extremely careful with special character escaping. Ensure %, &, $, _, #, {, } are correctly escaped unless they form valid LaTeX commands.\n"
+            "6. Immediately after the \\end{document} tag, write a detailed, structured plain-text/markdown summary of the improvements made. Format it nicely (e.g. list modified sections, added keywords, and explanation).\n\n"
+            "STRICT LENGTH RULES (MANDATORY):\n"
+            "6. The tailored resume MUST NOT exceed the page length of the original resume. The input resume is at most 2 pages; the output MUST also be at most 2 pages.\n"
+            "7. Keep the Professional Summary / Objective section to a MAXIMUM of 2-3 concise lines. Never expand it into a paragraph.\n"
+            "8. For each work experience role, output the SAME number of bullet points as the original resume (±1 at most). Do NOT add extra bullets.\n"
+            "9. Do NOT add new sections, roles, projects, or certifications that were not in the original resume.\n"
+            "10. Prefer concise, impactful rephrasing over verbose expansion. Replace weak words with strong keywords — do not add more text.\n\n"
+            "HUMAN TONE RULES (CRITICAL — the resume must read like a real person wrote it):\n"
+            "11. BAN these overused AI words entirely: 'leveraged', 'utilized', 'spearheaded', 'orchestrated', 'synergy', 'cutting-edge', 'state-of-the-art', 'best-in-class', 'holistic', 'robust', 'scalable solutions', 'streamlined', 'cross-functional', 'paradigm'. Use plain, natural alternatives instead (e.g., 'used' not 'utilized', 'led' not 'spearheaded', 'built' not 'architected a robust solution').\n"
+            "12. VARY sentence structure. Not every bullet should start with a past-tense action verb. Mix patterns: some bullets start with context ('As the lead on X, built...'), some with results ('Reduced latency by 40% by rewriting...'), some with the action verb. Aim for no more than 3 consecutive bullets starting the same way.\n"
+            "13. PRESERVE the candidate's original voice and writing style. If the original resume uses casual phrasing, keep it casual. If formal, stay formal. Do not impose a uniform corporate tone.\n"
+            "14. USE SPECIFIC details over vague claims. 'Built a data pipeline processing 2M events/day' beats 'Developed a scalable data processing solution'. Concrete numbers and technologies sound human; buzzword soup sounds AI-generated.\n"
+            "15. KEEP the summary/objective natural and conversational — it should sound like how the candidate would introduce themselves in an interview, not like a marketing blurb."
         )
 
         completion = create_chat_completion(
@@ -162,8 +210,7 @@ def tailor_resume(resume: str, job_description: str, model: str | None = None, p
         )
 
         # Sanitize model output to remove any chain-of-thought blocks
-        tailored_resume = sanitize_model_output(
-            completion.choices[0].message.content.strip())
+        tailored_resume = sanitize_model_output(_get_content(completion))
         return tailored_resume
 
     except Exception as e:
@@ -171,13 +218,104 @@ def tailor_resume(resume: str, job_description: str, model: str | None = None, p
         raise
 
 
-def create_tailoring_prompt(resume: str, job_description: str, relevant_sections: list, job_keywords: list) -> str:
+async def tailor_resume_stream(resume: str, job_description: str, model: str | None = None, provider: str | None = None, job_keywords: list | None = None) -> AsyncGenerator[str, None]:
+    """
+    Tailor resume using AI, streaming the response back.
+    """
+    try:
+        if not job_keywords:
+            job_keywords = extract_job_keywords_with_ai(
+                job_description, provider)
+
+        prompt = create_tailoring_prompt(
+            resume, job_description, job_keywords)
+
+        provider_model = resolve_tailor_model(model, provider)
+
+        system_prompt = (
+            "You are an expert resume writer and LaTeX formatting specialist.\n"
+            "Your objective is to tailor the candidate's LaTeX resume to align with a target job description.\n\n"
+            "CRITICAL FORMATTING RULES:\n"
+            "1. Output ONLY valid, compile-ready LaTeX code representing the tailored resume. DO NOT include any conversational filler.\n"
+            "2. YOU MUST OUTPUT THE ENTIRE LATEX DOCUMENT FROM START TO FINISH. Do NOT omit, truncate, or abbreviate the preamble, packages, or unchanged sections. Start exactly with \\documentclass and end exactly with \\end{document}.\n"
+            "3. Do NOT use markdown code fences (e.g. ```latex) or pre/post commentary within the LaTeX section.\n"
+            "4. Preserve all existing LaTeX packages, layouts, structure, and headers. Only modify contents inside the document.\n"
+            "5. Be extremely careful with special character escaping. Ensure %, &, $, _, #, {, } are correctly escaped unless they form valid LaTeX commands.\n"
+            "6. Immediately after the \\end{document} tag, write a detailed, structured plain-text/markdown summary of the improvements made. Format it nicely (e.g. list modified sections, added keywords, and explanation).\n\n"
+            "STRICT LENGTH RULES (MANDATORY):\n"
+            "6. The tailored resume MUST NOT exceed the page length of the original resume. The input resume is at most 2 pages; the output MUST also be at most 2 pages.\n"
+            "7. Keep the Professional Summary / Objective section to a MAXIMUM of 2-3 concise lines. Never expand it into a paragraph.\n"
+            "8. For each work experience role, output the SAME number of bullet points as the original resume (±1 at most). Do NOT add extra bullets.\n"
+            "9. Do NOT add new sections, roles, projects, or certifications that were not in the original resume.\n"
+            "10. Prefer concise, impactful rephrasing over verbose expansion. Replace weak words with strong keywords — do not add more text.\n\n"
+            "HUMAN TONE RULES (CRITICAL — the resume must read like a real person wrote it):\n"
+            "11. BAN these overused AI words entirely: 'leveraged', 'utilized', 'spearheaded', 'orchestrated', 'synergy', 'cutting-edge', 'state-of-the-art', 'best-in-class', 'holistic', 'robust', 'scalable solutions', 'streamlined', 'cross-functional', 'paradigm'. Use plain, natural alternatives instead (e.g., 'used' not 'utilized', 'led' not 'spearheaded', 'built' not 'architected a robust solution').\n"
+            "12. VARY sentence structure. Not every bullet should start with a past-tense action verb. Mix patterns: some bullets start with context ('As the lead on X, built...'), some with results ('Reduced latency by 40% by rewriting...'), some with the action verb. Aim for no more than 3 consecutive bullets starting the same way.\n"
+            "13. PRESERVE the candidate's original voice and writing style. If the original resume uses casual phrasing, keep it casual. If formal, stay formal. Do not impose a uniform corporate tone.\n"
+            "14. USE SPECIFIC details over vague claims. 'Built a data pipeline processing 2M events/day' beats 'Developed a scalable data processing solution'. Concrete numbers and technologies sound human; buzzword soup sounds AI-generated.\n"
+            "15. KEEP the summary/objective natural and conversational — it should sound like how the candidate would introduce themselves in an interview, not like a marketing blurb."
+        )
+
+        stream = create_chat_completion_stream(
+            provider,
+            provider_model,
+            [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": prompt}
+            ]
+        )
+
+        buffer = ""
+        in_think = False
+        think_ended = False
+
+        async for chunk in stream:
+            if not chunk:
+                continue
+                
+            buffer += chunk
+            
+            if not think_ended:
+                if "<think>" in buffer and not in_think:
+                    in_think = True
+                    pre_think = buffer.split("<think>")[0]
+                    if pre_think:
+                        clean_pre = re.sub(r"```[a-zA-Z]*\n?", "", pre_think)
+                        clean_pre = clean_pre.replace("```", "")
+                        yield clean_pre
+                
+                if in_think:
+                    if "</think>" in buffer:
+                        in_think = False
+                        think_ended = True
+                        buffer = buffer.split("</think>")[-1].lstrip()
+                    else:
+                        continue
+            
+            if not in_think:
+                buffer = re.sub(r"```[a-zA-Z]*\n?", "", buffer)
+                buffer = buffer.replace("```", "")
+                
+                if len(buffer) > 15:
+                    yield buffer[:-15]
+                    buffer = buffer[-15:]
+                    
+        if buffer:
+            buffer = re.sub(r"```[a-zA-Z]*\n?", "", buffer)
+            buffer = buffer.replace("```", "")
+            if buffer.strip():
+                yield buffer
+
+    except Exception as e:
+        logger.error(f"Error streaming tailored resume: {str(e)}")
+        raise
+
+
+
+def create_tailoring_prompt(resume: str, job_description: str, job_keywords: list) -> str:
     """
     Create a comprehensive prompt for resume tailoring
     """
-    focus_sections = ", ".join(set([sec['section_type'].replace('_', ' ').title(
-    ) for sec in relevant_sections])) if relevant_sections else "All sections"
-
     prompt = f"""
 You are a professional resume writer. Tailor the original LaTeX resume to match the target job description.
 
@@ -189,20 +327,35 @@ You are a professional resume writer. Tailor the original LaTeX resume to match 
 {', '.join(job_keywords)}
 </target_keywords>
 
-<focus_sections>
-Focus your tailoring efforts on the following key sections: {focus_sections}. Ensure other sections remain intact unless adjustments are necessary.
-</focus_sections>
-
 <original_resume>
 {resume}
 </original_resume>
 
 INSTRUCTIONS & CONSTRAINTS:
 1. PRESERVE LATEX SYNTAX: Keep the exact LaTeX document structure, including the documentclass, packages, layout, and document environment. Do not introduce compile errors.
-2. ESCAPE SPECIAL CHARACTERS: Ensure special characters like '%', '&', '$', '_', '#', '{{', '}}' are escaped correctly (e.g. use \\& instead of & for ampersands, \\_ instead of _ for underscores, etc.) inside text content.
-3. ZERO HALLUCINATION: Do NOT invent new jobs, roles, dates, companies, degree credentials, or certifications. Only optimize, rephrase, and align existing experiences to emphasize matching skills.
-4. INTEGRATE KEYWORDS: Seamlessly incorporate target keywords into relevant bullet points. Focus on describing achievements using action verbs (e.g., Designed, Led, Automated) and quantifying impact (e.g., increased performance by 15%) without fabricating facts.
-5. LENGTH CONSTRAINT: Keep the tailored resume layout clean and page-length identical to the original resume.
+2. OUTPUT FULL DOCUMENT: You must output the ENTIRE LaTeX code from start to finish. DO NOT truncate, omit, or use placeholders for unchanged sections. DO NOT include conversational filler like 'Here is your resume'.
+3. ESCAPE SPECIAL CHARACTERS: Ensure special characters like '%', '&', '$', '_', '#', '{', '}' are escaped correctly (e.g. use \\& instead of & for ampersands, \\_ instead of _ for underscores, etc.) inside text content.
+4. ZERO HALLUCINATION: Do NOT invent new jobs, roles, dates, companies, degree credentials, or certifications. Only optimize, rephrase, and align existing experiences to emphasize matching skills.
+5. INTEGRATE KEYWORDS: Weave target keywords into bullet points naturally — they should read like the candidate genuinely used those technologies, not like keywords were stuffed in. Place keywords where they make contextual sense (e.g., mention 'Kubernetes' when describing deployment work, not in a UI bullet).
+
+LENGTH & DENSITY RULES (CRITICAL — violating these is a failure):
+6. The output resume MUST NOT exceed the page count of the original resume. If the original is 1 page, output 1 page. If 2 pages, output at most 2 pages.
+7. SUMMARY / OBJECTIVE: Keep it to 2-3 short, punchy lines maximum. Never write a full paragraph. Distill the candidate's value proposition into one concise statement aligned to the target role.
+7. BULLET POINT COUNT: For each job/project, keep the exact same number of bullet points as the original (±1). Do NOT add new bullets to pad content.
+8. BULLET POINT LENGTH: Each bullet should be 1-2 lines max. If the original bullet was 1 line, the tailored version should also be ~1 line. Do not expand single-line bullets into multi-line ones.
+9. NO NEW SECTIONS OR ENTRIES: Do not add new work experience entries, projects, education entries, or skill categories that were not in the original resume.
+10. TECHNIQUE: Achieve keyword integration by replacing or rephrasing existing words — not by appending extra text. Swap weak verbs for strong action verbs, swap generic nouns for target keywords. The total character count of each section should be approximately the same as the original (±10%).
+
+HUMAN TONE RULES (the resume MUST NOT sound AI-generated):
+11. BANNED WORDS — never use these: 'leveraged', 'utilized', 'spearheaded', 'orchestrated', 'synergy', 'cutting-edge', 'state-of-the-art', 'best-in-class', 'holistic', 'robust', 'scalable solutions', 'streamlined', 'cross-functional', 'paradigm', 'innovative solutions'. Use plain equivalents: 'used' not 'utilized', 'led' not 'spearheaded', 'built' not 'architected'.
+12. VARY BULLET STRUCTURE — not every bullet should be "[Action verb] [object] [result]". Mix it up:
+   - Context-first: "As part of the migration team, rewrote the auth service in Go"
+   - Result-first: "Cut deploy time from 20min to 3min by switching to Docker multi-stage builds"
+   - Action-first: "Built a real-time analytics dashboard tracking 500K daily events"
+   No more than 3 consecutive bullets should start the same way.
+13. PRESERVE ORIGINAL VOICE — match the tone and style of the original resume. If informal, stay informal. If technical and detailed, stay technical. Do not flatten everything into generic corporate-speak.
+14. PREFER SPECIFICS OVER BUZZWORDS — "Built a Python ETL pipeline processing 2M records/day" sounds human. "Developed a robust, scalable data processing solution" sounds AI. Always choose the concrete version.
+15. NATURAL KEYWORD PLACEMENT — keywords should appear where they contextually belong. Don't cluster all keywords into a single bullet or the summary. Spread them across relevant bullets where the technology was actually used.
 
 TAILORED RESUME:
 """
@@ -216,13 +369,14 @@ def extract_job_keywords_with_ai(job_description: str, provider: str | None = No
     try:
         completion = create_chat_completion(
             provider,
-            resolve_auxiliary_model(provider, settings.keyword_extraction_model),
+            resolve_auxiliary_model(
+                provider, settings.keyword_extraction_model),
             [
                 {"role": "system", "content": "You are an expert recruiter. Extract a list of the top 15 most important technical skills, tools, frameworks, methodologies, and requirements from the job description. Output only a comma-separated list of these keywords. Do not include any introductory text or explanation."},
                 {"role": "user", "content": job_description}
             ]
         )
-        content = completion.choices[0].message.content.strip()
+        content = _get_content(completion)
         # Clean and split keywords
         keywords = [kw.strip().lower()
                     for kw in content.split(",") if kw.strip()]
@@ -270,7 +424,7 @@ Return ONLY the raw JSON object. Do not include markdown code fences or any othe
                 {"role": "user", "content": prompt}
             ]
         )
-        content = completion.choices[0].message.content.strip()
+        content = _get_content(completion)
 
         # Clean any potential code fences
         if content.startswith("```"):
@@ -356,13 +510,15 @@ def extract_company_name_with_ai(job_description: str, provider: str | None = No
     try:
         completion = create_chat_completion(
             provider,
-            resolve_auxiliary_model(provider, settings.keyword_extraction_model),
+            resolve_auxiliary_model(
+                provider, settings.keyword_extraction_model),
             [
-                {"role": "system", "content": "You are an assistant that extracts the employing company name from a job description. Output ONLY the company name (1-3 words). If the company name is not mentioned or cannot be found, output 'Unknown'. Do not include any punctuation or extra words."},
+                {"role": "system",
+                    "content": "You are an assistant that extracts the employing company name from a job description. Output ONLY the company name (1-3 words). If the company name is not mentioned or cannot be found, output 'Unknown'. Do not include any punctuation or extra words."},
                 {"role": "user", "content": job_description}
             ]
         )
-        name = completion.choices[0].message.content.strip()
+        name = _get_content(completion)
         if name.lower() == "unknown":
             return ""
         # Clean any quotes or extra characters
@@ -383,7 +539,8 @@ def generate_outreach(resume: str, job_description: str, recipient: str, channel
         recip_label = "Recruiter" if recipient.lower() == "recruiter" else "CEO"
         chan_label = "Email" if channel.lower() == "email" else "LinkedIn InMail"
 
-        provider_model = resolve_auxiliary_model(provider, settings.outreach_model)
+        provider_model = resolve_auxiliary_model(
+            provider, settings.outreach_model)
 
         system_prompt = (
             "You are an expert career coach and professional copywriter.\n"
@@ -422,7 +579,7 @@ Please generate the outreach message in the requested JSON format. Output ONLY t
                 {"role": "user", "content": user_prompt}
             ]
         )
-        content = completion.choices[0].message.content.strip()
+        content = _get_content(completion)
 
         # Clean any potential code fences
         if content.startswith("```"):
@@ -493,7 +650,7 @@ Do not include any markdown fences or other text.
                 {"role": "user", "content": prompt}
             ]
         )
-        content = completion.choices[0].message.content.strip()
+        content = _get_content(completion)
         if content.startswith("```"):
             lines = content.splitlines()
             if lines[0].startswith("```"):
@@ -550,7 +707,7 @@ Do not include markdown fences or any text outside the JSON object.
                 {"role": "user", "content": prompt},
             ],
         )
-        content = completion.choices[0].message.content.strip()
+        content = _get_content(completion)
         if content.startswith("```"):
             lines = content.splitlines()
             if lines[0].startswith("```"):

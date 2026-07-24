@@ -4,12 +4,13 @@ import Prism from "prismjs";
 import "prismjs/components/prism-latex";
 import { Document, Page, pdfjs } from "react-pdf";
 import api from "../services/api";
+import ProgressStepper from "./ProgressStepper";
 
 // Configure the PDF.js worker to the exact API version that react-pdf is using
 // This avoids version mismatches between the core library and the worker
 pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
-const TailoredOutput = ({ output, resumeContent, loading, companyName }) => {
+const TailoredOutput = ({ output, resumeContent, loading, companyName, progressSteps }) => {
   const codeRef = useRef(null);
   const [text, setText] = useState(output || "");
   const [pdfBlobUrl, setPdfBlobUrl] = useState("");
@@ -129,7 +130,11 @@ const TailoredOutput = ({ output, resumeContent, loading, companyName }) => {
           ) : (
             <div className="placeholder-surface">
               {mode === "loading" ? (
-                <div className="notice">Tailored LaTeX will appear here…</div>
+                progressSteps && progressSteps.length > 0 ? (
+                  <ProgressStepper steps={progressSteps} />
+                ) : (
+                  <div className="notice">Tailored LaTeX will appear here…</div>
+                )
               ) : (
                 <div className="notice">Your LaTeX will appear here.</div>
               )}
@@ -172,6 +177,8 @@ const TailoredOutput = ({ output, resumeContent, loading, companyName }) => {
             >
               <Page pageNumber={currentPage} width={pageWidth || 720} renderTextLayer={false} renderAnnotationLayer={false} />
             </Document>
+          ) : loading && progressSteps && progressSteps.length > 0 ? (
+            <ProgressStepper steps={progressSteps} />
           ) : (
             <div className="notice">PDF preview will appear here.</div>
           )}
